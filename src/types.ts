@@ -86,5 +86,7 @@ export interface Release {
   notes: string;
   url: string;
   apkUrl: string | null;
+  apkSize?: number;
+  apkSha256?: string;
   publishedAt: string;
 }

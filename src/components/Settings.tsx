@@ -10,7 +10,6 @@ import {
   UserRound,
   Palette,
   ShieldCheck,
-  ArrowUpRight,
   Leaf,
   Download,
   Upload,
@@ -29,6 +28,7 @@ import { enableNotifications, syncReminders, saveBackup } from '../lib/native';
 import { checkUpdate, repository } from '../lib/updates';
 import { defaultBottomMenus, menuOptions, normalizeBottomMenus } from '../lib/navigation';
 import { PageHeading, SubHeading, Modal } from './ui';
+import { UpdateAction } from './UpdateAction';
 import version from '../version.json';
 import type { Profile, Release } from '../types';
 
@@ -614,16 +614,7 @@ export function Settings({
             <div className="update-inline">
               <h3>新版本 {release.version}</h3>
               <pre>{release.notes}</pre>
-              <a
-                className="primary-button"
-                href={release.apkUrl || release.url}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {release.apkUrl ? '下载并更新' : '查看发布详情'}
-                <ArrowUpRight size={16} />
-              </a>
-              <small>下载后由安卓系统确认安装；旧版花园数据会保留。</small>
+              <UpdateAction key={release.version} release={release} />
             </div>
           )}
         </div>

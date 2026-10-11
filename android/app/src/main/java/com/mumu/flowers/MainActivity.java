@@ -6,12 +6,17 @@ import android.os.Bundle;
 import android.view.Display;
 import android.view.View;
 import android.view.WindowManager;
+import androidx.core.splashscreen.SplashScreen;
 
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        SplashScreen splash = SplashScreen.installSplashScreen(this);
         registerPlugin(GalleryPickerPlugin.class);
+        registerPlugin(UpdateInstallerPlugin.class);
         super.onCreate(savedInstanceState);
+        splash.setOnExitAnimationListener(provider -> provider.getView().animate()
+            .alpha(0f).setDuration(160).withEndAction(provider::remove).start());
     }
 
     @Override

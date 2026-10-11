@@ -29,7 +29,6 @@ import {
   RefreshCw,
   Scissors,
   ShieldCheck,
-  Download,
   Pencil,
   Trash2,
   CheckCheck,
@@ -52,7 +51,6 @@ import { loadConnection, submitAnalysis, pollJobs, retryJob, api } from './lib/a
 import { compressPhoto, nativePhoto, haptic, syncReminders } from './lib/native';
 import { checkUpdate } from './lib/updates';
 import {
-  Brand,
   PageHeading,
   SectionTitle,
   SubHeading,
@@ -66,6 +64,8 @@ import {
 } from './components/ui';
 import { Settings } from './components/Settings';
 import { PlantDetail } from './components/PlantDetail';
+import { StartupScreen } from './components/StartupScreen';
+import { UpdateAction } from './components/UpdateAction';
 import {
   addCalendarDays,
   nextCareAt,
@@ -424,22 +424,14 @@ export default function App() {
 
   if (initError)
     return (
-      <div className="boot-screen">
-        <Brand />
+      <StartupScreen>
         <p>{initError}</p>
         <button className="primary-button" onClick={() => window.location.reload()}>
           重新尝试
         </button>
-      </div>
+      </StartupScreen>
     );
-  if (!ready)
-    return (
-      <div className="boot-screen">
-        <Brand />
-        <LoaderCircle className="spin" size={24} />
-        <p>小花园正在醒来…</p>
-      </div>
-    );
+  if (!ready) return <StartupScreen />;
   const weekStart = startOfDay(Date.now()) - ((new Date().getDay() + 6) % 7) * day;
   const upcoming = [...plants].sort((a, b) => nextCareAt(a) - nextCareAt(b));
   const carePlants =
@@ -1737,27 +1729,14 @@ export default function App() {
         >
           <span className="version-tag">新版本 {release.version}</span>
           <pre className="update-notes">{release.notes}</pre>
-          <div className="button-row">
-            <a
-              className="primary-button"
-              href={release.apkUrl || release.url}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <Download size={17} />
-              {release.apkUrl ? '立即更新' : '查看新版'}
-            </a>
-            <button
-              className="secondary-button"
-              onClick={() => {
-                sessionStorage.setItem('mumu-update-later', release.version);
-                setRelease(null);
-              }}
-            >
-              稍后更新
-            </button>
-          </div>
-          <p className="muted">下载 APK 后，由安卓系统确认安装；相同签名的更新会保留本机数据。</p>
+          <UpdateAction
+            key={release.version}
+            release={release}
+            later={() => {
+              sessionStorage.setItem('mumu-update-later', release.version);
+              setRelease(null);
+            }}
+          />
         </Modal>
       )}
       {lightbox && (

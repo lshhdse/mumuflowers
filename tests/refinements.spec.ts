@@ -65,7 +65,7 @@ test('new versions proactively show release notes and remain available after cho
   await page.goto('/');
   const update = page.getByRole('dialog', { name: '小花园有了新变化' });
   await expect(update.getByText(/新的相册入口/)).toBeVisible();
-  await expect(update.getByRole('link', { name: '立即更新' })).toHaveAttribute(
+  await expect(update.getByRole('link', { name: '下载安卓安装包' })).toHaveAttribute(
     'href',
     /MuMu-Flowers-9.0.0.apk$/,
   );
@@ -80,5 +80,5 @@ test('new versions proactively show release notes and remain available after cho
   await page.getByRole('button', { name: /版本更新/ }).click();
   await expect(page.getByRole('heading', { name: 'MuMu Flowers', exact: true })).toBeVisible();
   await page.getByRole('button', { name: '检查更新', exact: true }).click();
-  await expect(page.getByRole('link', { name: '下载并更新' })).toBeVisible();
+  await expect(page.getByRole('link', { name: '下载安卓安装包' })).toBeVisible();
 });

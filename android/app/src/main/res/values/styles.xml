@@ -20,8 +20,8 @@
 
 
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">#F6F7F2</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/mumu_flower</item>
+        <item name="windowSplashScreenBackground">@color/mumu_splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/mumu_splash_flower</item>
         <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
     </style>
 </resources>

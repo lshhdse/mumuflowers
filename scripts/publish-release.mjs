@@ -11,6 +11,22 @@ if (!version.notes?.length) throw new Error('请先在 src/version.json 填写�
 const filename = `MuMu-Flowers-${version.version}.apk`;
 const apk = readFileSync(`artifacts/${filename}`);
 const digest = `sha256:${createHash('sha256').update(apk).digest('hex')}`;
+const tag = `v${version.version}`;
+const manifest = Buffer.from(
+  JSON.stringify(
+    {
+      version: version.version,
+      notes: version.notes.map((note) => `- ${note}`).join('\n'),
+      url: `https://github.com/lshhdse/mumuflowers/releases/tag/${tag}`,
+      apkUrl: `https://github.com/lshhdse/mumuflowers/releases/download/${tag}/${filename}`,
+      apkSize: apk.length,
+      apkSha256: digest.slice(7),
+      publishedAt: version.releasedAt,
+    },
+    null,
+    2,
+  ) + '\n',
+);
 const credential = process.env.GITHUB_TOKEN
   ? null
   : execFileSync(
@@ -42,7 +58,7 @@ async function request(url, options = {}) {
   const response = await fetch(url, {
     ...options,
     headers: { ...headers, ...options.headers },
-    signal: AbortSignal.timeout(options.body === apk ? 60000 : 30000),
+    signal: AbortSignal.timeout(Buffer.isBuffer(options.body) ? 90000 : 30000),
   });
   if (!response.ok) {
     let message = '';
@@ -53,7 +69,6 @@ async function request(url, options = {}) {
   }
   return response.json();
 }
-const tag = `v${version.version}`;
 const refreshNote = version.notes.some((note) => note.includes('120Hz'))
   ? '高刷新率由设备、系统设置和省电策略决定；已优化全局动画并请求最高 120Hz。\n\n'
   : '';
@@ -70,7 +85,7 @@ try {
         name: `MuMu Flowers ${version.version}`,
         draft: true,
         prerelease: false,
-        body: `${version.notes.map((note) => `- ${note}`).join('\n')}\n\n${refreshNote}下载下方 APK 覆盖安装即可保留花园照片、浇水记录和设置。已有版本可在“我的 → 版本更新”中检查新版。`,
+        body: `${version.notes.map((note) => `- ${note}`).join('\n')}\n\n${refreshNote}下载下方 APK 覆盖安装即可保留花园照片、浇水记录和设置。1.0.4 起支持 App 内下载和调用安卓安装界面。较旧版本请先安装本次更新，之后的新版本可直接在 App 内下载安装。首次使用请按系统提示允许 MuMu Flowers 安装应用，仍需手动确认安装。`,
       }),
     });
     console.log(`已创建 ${tag} 发布草稿。`);
@@ -96,6 +111,22 @@ try {
     (asset.digest && asset.digest !== digest)
   )
     throw new Error('安装包大小或校验值不匹配，保留草稿以便检查。');
+  let manifestAsset = release.assets.find((item) => item.name === 'update.json');
+  if (!manifestAsset) {
+    console.log('正在上传更新清单。');
+    manifestAsset = await request(`${release.upload_url.replace(/\{.*$/, '')}?name=update.json`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': String(manifest.length) },
+      body: manifest,
+    });
+  }
+  const manifestDigest = `sha256:${createHash('sha256').update(manifest).digest('hex')}`;
+  if (
+    manifestAsset.state !== 'uploaded' ||
+    manifestAsset.size !== manifest.length ||
+    (manifestAsset.digest && manifestAsset.digest !== manifestDigest)
+  )
+    throw new Error('更新清单校验未通过，保留草稿以便检查。');
   if (release.draft) {
     await request(`${api}/releases/${release.id}`, {
       method: 'PATCH',
@@ -105,7 +136,14 @@ try {
   }
   const latest = await request(`${api}/releases/latest`);
   const finalAsset = latest.assets.find((item) => item.name === filename);
-  if (latest.tag_name !== tag || !finalAsset || finalAsset.size !== apk.length)
+  const finalManifest = latest.assets.find((item) => item.name === 'update.json');
+  if (
+    latest.tag_name !== tag ||
+    !finalAsset ||
+    finalAsset.size !== apk.length ||
+    !finalManifest ||
+    finalManifest.size !== manifest.length
+  )
     throw new Error('最新版本校验未通过，请重新运行以检查发布状态。');
   console.log(
     JSON.stringify({

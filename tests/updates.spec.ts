@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { readableText } from './contrast';
 
 async function androidFixture(page: Page) {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -6,6 +7,7 @@ async function androidFixture(page: Page) {
     const win = window as unknown as Record<string, any>;
     win.androidBridge = {};
     win.updateCalls = [];
+    win.appearanceCalls = [];
     win.downloadState = { status: 'idle' };
     const manifest = {
       version: '9.0.0',
@@ -19,6 +21,11 @@ async function androidFixture(page: Page) {
     };
     win.Capacitor = {
       PluginHeaders: [
+        { name: 'SystemBars', methods: [{ name: 'setStyle', rtype: 'promise' }] },
+        {
+          name: 'LaunchScreen',
+          methods: ['ready', 'appearance'].map((name) => ({ name, rtype: 'promise' })),
+        },
         {
           name: 'UpdateInstaller',
           methods: ['start', 'status', 'cancel', 'install', 'removeListener']
@@ -42,6 +49,10 @@ async function androidFixture(page: Page) {
       ],
       nativeCallback: () => Promise.resolve('listener'),
       nativePromise: async (plugin: string, method: string, options: Record<string, unknown>) => {
+        if (plugin === 'LaunchScreen' || plugin === 'SystemBars') {
+          win.appearanceCalls.push({ plugin, method, options });
+          return {};
+        }
         if (plugin === 'CapacitorHttp') return { status: 200, data: manifest };
         if (plugin === 'LocalNotifications') return { notifications: [], display: 'denied' };
         if (plugin !== 'UpdateInstaller') return {};
@@ -69,6 +80,80 @@ async function androidFixture(page: Page) {
         return win.downloadState;
       },
     };
+  });
+}
+
+test('Android manual appearance synchronizes system bars and background without following OS changes', async ({
+  page,
+}) => {
+  await androidFixture(page);
+  await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
+  await page.goto('/#/my/appearance');
+  await page.getByRole('dialog').getByRole('button', { name: '稍后更新' }).click();
+  await page.getByRole('button', { name: '深色模式', exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as any).appearanceCalls.filter((call: any) => call.method === 'appearance').at(-1)
+            ?.options.dark,
+      ),
+    )
+    .toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as any).appearanceCalls.filter((call: any) => call.method === 'setStyle').at(-1)
+            ?.options.style,
+      ),
+    )
+    .toBe('DARK');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.getByRole('button', { name: '浅色模式', exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as any).appearanceCalls.filter((call: any) => call.method === 'appearance').at(-1)
+            ?.options.dark,
+      ),
+    )
+    .toBe(false);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as any).appearanceCalls.filter((call: any) => call.method === 'setStyle').at(-1)
+            ?.options.style,
+      ),
+    )
+    .toBe('LIGHT');
+});
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`${theme}: update notes, download progress and errors keep readable contrast`, async ({
+    page,
+  }) => {
+    await androidFixture(page);
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
+    await page.goto('/');
+    const update = page.getByRole('dialog', { name: '小花园有了新变化' });
+    await expect(update).toBeVisible();
+    await readableText(page, '[role="dialog"]');
+    await update.getByRole('button', { name: '立即更新', exact: true }).click();
+    await expect(update.getByRole('progressbar')).toBeVisible();
+    await readableText(page, '[role="dialog"]');
+    await page.evaluate(() => {
+      (window as any).downloadState = {
+        status: 'failed',
+        version: '9.0.0',
+        message: '网络中断，请重试。',
+      };
+    });
+    await expect(update.getByRole('button', { name: '重新下载', exact: true })).toBeVisible();
+    await readableText(page, '[role="dialog"]');
+    await page.screenshot({ path: `artifacts/update-${theme}-1.0.5.png` });
   });
 }
 

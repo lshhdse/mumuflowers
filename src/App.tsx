@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Capacitor } from '@capacitor/core';
@@ -48,7 +56,15 @@ import {
   day,
 } from './lib/db';
 import { loadConnection, submitAnalysis, pollJobs, retryJob, api } from './lib/api';
-import { compressPhoto, nativePhoto, haptic, syncReminders } from './lib/native';
+import {
+  compressPhoto,
+  nativePhoto,
+  haptic,
+  syncReminders,
+  finishLaunch,
+  syncAppearance,
+} from './lib/native';
+import { applyTheme, useResolvedTheme } from './lib/appearance';
 import { checkUpdate } from './lib/updates';
 import {
   PageHeading,
@@ -122,6 +138,7 @@ export default function App() {
     [direction, setDirection] = useState(1);
   const navStack = useRef([pathNow()]);
   const [profile, setProfileState] = useState(loadProfile);
+  const resolvedTheme = useResolvedTheme(profile.theme);
   const [toastText, setToastText] = useState('');
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [busy, setBusy] = useState(false),
@@ -149,6 +166,9 @@ export default function App() {
   const photoInput = useRef<HTMLInputElement>(null),
     cameraInput = useRef<HTMLInputElement>(null);
   const reduceMotion = useReducedMotion();
+  useLayoutEffect(() => {
+    if (ready || initError) finishLaunch(Boolean(reduceMotion));
+  }, [ready, initError, reduceMotion]);
   const plants = useLiveQuery(() => db.plants.orderBy('createdAt').reverse().toArray(), [], []);
   const entries = useLiveQuery(() => db.entries.orderBy('createdAt').reverse().toArray(), [], []);
   const photos = useLiveQuery(() => db.photos.orderBy('createdAt').reverse().toArray(), [], []);
@@ -278,7 +298,7 @@ export default function App() {
     e.target.value = '';
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     void initializeGarden()
       .then(() => setReady(true))
       .catch(() => setInitError('无法打开本机存储，请允许此应用保存数据后重试。'));
@@ -296,14 +316,9 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handler);
   }, []);
   useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const apply = () =>
-      (document.documentElement.dataset.theme =
-        profile.theme === 'system' ? (media.matches ? 'dark' : 'light') : profile.theme);
-    apply();
-    media.addEventListener('change', apply);
-    return () => media.removeEventListener('change', apply);
-  }, [profile.theme]);
+    applyTheme(resolvedTheme);
+    syncAppearance(resolvedTheme === 'dark');
+  }, [resolvedTheme]);
   useEffect(() => {
     const poll = () => {
       if (document.visibilityState !== 'hidden')
@@ -544,6 +559,7 @@ export default function App() {
             <motion.div
               key={path}
               className="page"
+              data-page={path}
               initial={
                 reduceMotion
                   ? { opacity: 1 }

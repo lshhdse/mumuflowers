@@ -35,7 +35,7 @@ export const defaultProfile: Profile = {
   gardenName: '我的小花园',
   notifications: false,
   reminderHour: 9,
-  theme: 'light',
+  theme: 'system',
   bottomMenus: [...defaultBottomMenus],
 };
 export function loadProfile(): Profile {
@@ -44,6 +44,7 @@ export function loadProfile(): Profile {
     return {
       ...defaultProfile,
       ...stored,
+      theme: ['light', 'dark', 'system'].includes(stored?.theme) ? stored.theme : 'system',
       bottomMenus: normalizeBottomMenus(stored?.bottomMenus),
     };
   } catch {

@@ -1,4 +1,4 @@
-import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Capacitor, registerPlugin, SystemBars, SystemBarsStyle } from '@capacitor/core';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
@@ -9,6 +9,21 @@ import { careReminders } from './reminders';
 const GalleryPicker = registerPlugin<{
   pick(): Promise<{ dataUrl?: string; cancelled?: boolean }>;
 }>('GalleryPicker');
+const LaunchScreen = registerPlugin<{
+  ready(options: { reducedMotion: boolean }): Promise<void>;
+  appearance(options: { dark: boolean }): Promise<void>;
+}>('LaunchScreen');
+export function syncAppearance(dark: boolean) {
+  if (Capacitor.getPlatform() === 'android')
+    void SystemBars.setStyle({ style: dark ? SystemBarsStyle.Dark : SystemBarsStyle.Light })
+      .catch(() => {})
+      .then(() => LaunchScreen.appearance({ dark }))
+      .catch(() => {});
+}
+export function finishLaunch(reducedMotion = false) {
+  if (Capacitor.getPlatform() === 'android')
+    void LaunchScreen.ready({ reducedMotion }).catch(() => {});
+}
 export async function haptic() {
   if (Capacitor.isNativePlatform())
     await Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});

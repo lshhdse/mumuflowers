@@ -1,0 +1,207 @@
+/* Blur stays local and constant; page and sheet motion uses transform / opacity. */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 35;
+  background: var(--glass-panel);
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  border-bottom: 1px solid var(--glass-border);
+}
+.bottom-nav {
+  background: var(--glass);
+  border-color: var(--glass-border);
+  backdrop-filter: blur(32px) saturate(145%);
+  -webkit-backdrop-filter: blur(32px) saturate(145%);
+  box-shadow:
+    inset 0 1px 0 var(--glass-border),
+    0 10px 30px #17251e24;
+}
+.bottom-nav-indicator {
+  background: var(--soft);
+}
+.bottom-nav > button {
+  color: var(--text);
+}
+.bottom-nav > button.active {
+  color: var(--green);
+}
+.modal {
+  background: var(--glass-panel);
+  border-color: var(--glass-border);
+  backdrop-filter: blur(26px) saturate(135%);
+  -webkit-backdrop-filter: blur(26px) saturate(135%);
+  box-shadow:
+    inset 0 1px 0 var(--glass-border),
+    0 16px 44px #17251e30;
+}
+.background-task {
+  color: var(--green);
+  background: var(--glass-panel);
+  border-color: var(--glass-border);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+.demo-card-label,
+.detail-photo-grid span {
+  background: #17271ecf;
+}
+.favorite-marker {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #17271ecf;
+  font-size: 17px;
+}
+.growth-gallery span {
+  background: linear-gradient(transparent, #17271ef2);
+}
+.growth-gallery small {
+  color: #fff;
+}
+.theme-options {
+  gap: 10px;
+  margin-top: 24px;
+}
+.theme-options > button {
+  padding: 10px 8px 14px;
+  border-radius: 16px;
+  background: var(--field);
+  min-width: 0;
+}
+.theme-options > button.selected {
+  border-color: var(--green);
+  background: var(--soft);
+}
+.theme-options b {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 13px 2px 5px;
+}
+.theme-options small {
+  font-size: 11px;
+  margin: 0 2px;
+  line-height: 1.5;
+}
+.theme-options > button > svg {
+  top: 15px;
+  right: 13px;
+  bottom: auto;
+  width: 20px;
+  height: 20px;
+  padding: 3px;
+  border-radius: 50%;
+  color: var(--primary-ink);
+  background: var(--primary);
+}
+.theme-preview {
+  height: 90px;
+  padding: 10px;
+  border-radius: 10px;
+}
+.appearance-status {
+  margin-top: 18px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+.analysis-warning {
+  color: var(--warning);
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+input:autofill {
+  -webkit-text-fill-color: var(--text);
+  box-shadow: 0 0 0 1000px var(--field) inset;
+}
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 3px;
+}
+input[type='checkbox'] {
+  accent-color: var(--primary);
+}
+html[data-theme='dark'] .modal {
+  border-color: var(--glass-border);
+}
+html[data-theme='dark'] .status-pill {
+  background: rgba(25, 43, 34, 0.94);
+}
+html[data-theme='dark'] .bottom-nav {
+  border-color: var(--glass-border);
+}
+html[data-theme='dark'] .switch-row input,
+html[data-theme='dark'] .menu-option input[type='checkbox'] {
+  background: #566959;
+}
+html[data-theme='dark'] .switch-row input:checked,
+html[data-theme='dark'] .menu-option input:checked {
+  background: var(--primary);
+}
+html[data-theme='dark'] .switch-row input:checked:after,
+html[data-theme='dark'] .menu-option input:checked:after {
+  background: var(--primary-ink);
+}
+html[data-theme='dark'] .job-icon.done,
+html[data-theme='dark'] .job-status.done,
+html[data-theme='dark'] .job-icon.failed,
+html[data-theme='dark'] .job-status.failed,
+html[data-theme='dark'] .journal-entry-icon.water,
+html[data-theme='dark'] .journal-entry-icon.note,
+html[data-theme='dark'] .journal-entry-icon.analysis,
+html[data-theme='dark'] .setting-icon {
+  background: var(--soft);
+}
+html[data-theme='dark'] .modal-scrim {
+  background: #080f0cb3;
+}
+html[data-theme='dark'] ::selection {
+  color: #fff;
+  background: #436449;
+}
+@media (max-width: 480px) {
+  .plant-card-content > small,
+  .plant-card-bottom > span:first-child,
+  .status-pill,
+  .settings-list small,
+  .panel-intro p,
+  .profile-card p,
+  .profile-count span,
+  .journal-entry small,
+  .journal-entry time,
+  .demo-card-label {
+    font-size: 11px;
+  }
+  .plant-card h3,
+  .collection-grid .plant-card h3 {
+    font-size: 14px;
+  }
+  .theme-options {
+    gap: 8px;
+  }
+  .theme-options b {
+    font-size: 12px;
+  }
+  .theme-options small {
+    font-size: 11px;
+  }
+  .settings-panel > .info-note,
+  .settings-panel > .muted,
+  .modal-description,
+  .modal > p,
+  .photo-picker > small,
+  .switch-row small,
+  .update-hint {
+    font-size: 11px;
+  }
+}

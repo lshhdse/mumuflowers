@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useReducedMotion } from 'framer-motion';
-import { X, Flower2, ChevronRight, ArrowLeft, Leaf, Droplets, Check } from 'lucide-react';
+import { X, Flower2, ChevronRight, ArrowLeft, Leaf, Droplets, Check, Heart } from 'lucide-react';
 import type { Plant } from '../types';
 import { wateredToday, waterReminderAt, wateringLabel } from '../lib/watering';
 
@@ -171,7 +171,11 @@ export function PlantCard({
             <i />
             {healthLabels[plant.health]}
           </span>
-          {plant.favorite && <span className="favorite-marker">♥</span>}
+          {plant.favorite && (
+            <span className="favorite-marker" aria-hidden="true">
+              <Heart size={15} fill="currentColor" />
+            </span>
+          )}
         </div>
         <div className="plant-card-content">
           <small>

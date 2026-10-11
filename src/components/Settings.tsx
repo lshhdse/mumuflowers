@@ -29,6 +29,7 @@ import { checkUpdate, repository } from '../lib/updates';
 import { defaultBottomMenus, menuOptions, normalizeBottomMenus } from '../lib/navigation';
 import { PageHeading, SubHeading, Modal } from './ui';
 import { UpdateAction } from './UpdateAction';
+import { useResolvedTheme } from '../lib/appearance';
 import version from '../version.json';
 import type { Profile, Release } from '../types';
 
@@ -76,6 +77,7 @@ export function Settings({
   const [importFile, setImportFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [localProfile, setLocalProfile] = useState(profile);
+  const resolvedTheme = useResolvedTheme(profile.theme);
   const rows = [
     {
       id: 'menus',
@@ -483,23 +485,25 @@ export function Settings({
         <div className="settings-panel">
           <div className="panel-intro">
             <Palette />
-            <h2>让眼睛，也休息一下</h2>
-            <p>磨砂玻璃、柔和阴影与自然的页面过渡。</p>
+            <h2>选择喜欢的明暗</h2>
+            <p>柔和的磨砂玻璃，让小花园在日夜之间自在切换。</p>
           </div>
-          <div className="theme-options">
+          <div className="theme-options" role="group" aria-label="外观模式">
             {(
               [
-                { id: 'light', name: '晨光', desc: '温暖明亮' },
-                { id: 'dark', name: '夜色', desc: '安静深绿' },
-                { id: 'system', name: '跟随系统', desc: '随时间变化' },
+                { id: 'system', name: '跟随系统', desc: '自动切换' },
+                { id: 'light', name: '浅色模式', desc: '温暖明亮' },
+                { id: 'dark', name: '深色模式', desc: '安静深绿' },
               ] as const
             ).map((theme) => (
               <button
                 className={profile.theme === theme.id ? 'selected' : ''}
+                aria-pressed={profile.theme === theme.id}
+                aria-label={theme.name}
                 key={theme.id}
                 onClick={() => setProfile({ ...profile, theme: theme.id })}
               >
-                <div className={`theme-preview ${theme.id}`}>
+                <div className={`theme-preview ${theme.id}`} aria-hidden="true">
                   <i />
                   <i />
                   <i />
@@ -510,6 +514,10 @@ export function Settings({
               </button>
             ))}
           </div>
+          <p className="appearance-status" role="status">
+            {profile.theme === 'system' ? '已跟随系统' : '已手动选择'} · 当前为
+            {resolvedTheme === 'dark' ? '深色' : '浅色'}模式
+          </p>
           <div className="info-note">
             <Leaf size={18} />
             <span>界面遵循系统“减少动态效果”偏好；安卓设备支持轻触反馈。</span>

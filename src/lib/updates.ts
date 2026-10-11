@@ -69,9 +69,14 @@ export async function checkUpdate(): Promise<Release | null> {
     connectTimeout: 12000,
     readTimeout: 12000,
   };
-  const response = native
-    ? await CapacitorHttp.get(options)
-    : await fetch(options.url, { headers: options.headers, signal: AbortSignal.timeout(12000) });
+  let response;
+  try {
+    response = native
+      ? await CapacitorHttp.get(options)
+      : await fetch(options.url, { headers: options.headers, signal: AbortSignal.timeout(12000) });
+  } catch {
+    throw new Error('无法检查更新，请确认网络连接后重试');
+  }
   if (response.status === 404) return null;
   if (response.status === 403 || response.status === 429)
     throw new Error('GitHub 检查额度暂时用完，请稍后重试');

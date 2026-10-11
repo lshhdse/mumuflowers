@@ -25,6 +25,6 @@ gradle = gradle
 await writeFile(path, gradle);
 await writeFile(
   'release-notes.md',
-  `MUMU Flowers v${version}\n\n${notes.map((n) => '- ' + n).join('\n')}\n\n下载 APK 后由安卓系统确认安装。相同签名的更新会保留花园数据。\n`,
+  `MuMu Flowers v${version}\n\n${notes.map((n) => '- ' + n).join('\n')}\n\n下载 APK 后由安卓系统确认安装。相同签名的更新会保留花园数据。\n`,
 );
 console.log(`Prepared v${version} (Android build ${build})`);

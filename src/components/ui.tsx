@@ -1,5 +1,6 @@
-import { useEffect, useRef, type ReactNode } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { useReducedMotion } from 'framer-motion';
 import { X, Flower2, ChevronRight, ArrowLeft, Leaf, Droplets, Check } from 'lucide-react';
 import type { Plant } from '../types';
 import { wateredToday, waterReminderAt, wateringLabel } from '../lib/watering';
@@ -51,7 +52,7 @@ export function Brand({ compact = false }: { compact?: boolean }) {
       </span>
       <div>
         <b>
-          MUMU<span>Flowers</span>
+          MuMu<span>Flowers</span>
         </b>
         {!compact && <small>好好生活，慢慢生长</small>}
       </div>
@@ -161,12 +162,7 @@ export function PlantCard({
 }) {
   const completed = wateredToday(plant);
   return (
-    <motion.article
-      layout
-      className="plant-card"
-      whileHover={{ y: -5 }}
-      whileTap={{ scale: 0.985 }}
-    >
+    <article className="plant-card">
       <button className="plant-card-open" aria-label={`查看${plant.name}档案`} onClick={onClick}>
         <div className="plant-card-image">
           <img src={plant.cover} alt={plant.name} loading="lazy" />
@@ -203,9 +199,36 @@ export function PlantCard({
           {completed ? '已打卡' : '浇水打卡'}
         </button>
       </div>
-    </motion.article>
+    </article>
   );
 }
+export const PlantGrid = memo(function PlantGrid({
+  plants,
+  busy,
+  className,
+  onOpen,
+  onWater,
+}: {
+  plants: Plant[];
+  busy: boolean;
+  className: string;
+  onOpen: (plant: Plant) => void;
+  onWater: (plant: Plant) => void;
+}) {
+  return (
+    <div className={className}>
+      {plants.map((plant) => (
+        <PlantCard
+          key={plant.id}
+          plant={plant}
+          busy={busy}
+          onClick={() => onOpen(plant)}
+          onWater={() => onWater(plant)}
+        />
+      ))}
+    </div>
+  );
+});
 export function Modal({
   title,
   children,
@@ -220,13 +243,26 @@ export function Modal({
   const ref = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  const [closing, setClosing] = useState(false);
+  const reduceMotion = useReducedMotion();
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestClose = () => {
+    if (closeTimer.current) return;
+    if (reduceMotion) closeRef.current();
+    else {
+      setClosing(true);
+      closeTimer.current = setTimeout(() => closeRef.current(), 140);
+    }
+  };
+  const requestRef = useRef(requestClose);
+  requestRef.current = requestClose;
   useEffect(() => {
     const old = document.activeElement as HTMLElement;
     const scroll = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-    ref.current?.focus();
+    ref.current?.focus({ preventScroll: true });
     const key = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closeRef.current();
+      if (event.key === 'Escape') requestRef.current();
       if (event.key === 'Tab') {
         const items = ref.current?.querySelectorAll<HTMLElement>(
           'button:not(:disabled),input:not(:disabled),select,textarea,a[href]',
@@ -250,39 +286,32 @@ export function Modal({
     document.addEventListener('keydown', key);
     return () => {
       document.removeEventListener('keydown', key);
+      if (closeTimer.current) clearTimeout(closeTimer.current);
       document.body.style.overflow = scroll;
-      old?.focus();
+      old?.focus({ preventScroll: true });
     };
   }, []);
-  return (
-    <AnimatePresence>
-      <motion.div
-        className="modal-backdrop"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={onClose}
+  return createPortal(
+    <div className={`modal-backdrop ${closing ? 'closing' : ''}`}>
+      <div className="modal-scrim" onClick={requestClose} aria-hidden="true" />
+      <div
+        ref={ref}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className={`modal ${wide ? 'wide' : ''}`}
+        onClick={(e) => e.stopPropagation()}
       >
-        <motion.div
-          ref={ref}
-          tabIndex={-1}
-          role="dialog"
-          aria-modal="true"
-          aria-label={title}
-          className={`modal ${wide ? 'wide' : ''}`}
-          initial={{ y: 30, scale: 0.97 }}
-          animate={{ y: 0, scale: 1 }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="modal-title">
-            <h2>{title}</h2>
-            <button className="icon-button" aria-label="关闭" onClick={onClose}>
-              <X size={20} />
-            </button>
-          </div>
-          {children}
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+        <div className="modal-title">
+          <h2>{title}</h2>
+          <button className="icon-button" aria-label="关闭" onClick={requestClose}>
+            <X size={20} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>,
+    document.body,
   );
 }

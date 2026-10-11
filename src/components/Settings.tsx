@@ -126,7 +126,7 @@ export function Settings({
       subtitle: `当前版本 ${version.version}`,
       color: 'green',
     },
-    { id: 'about', icon: Info, title: '关于 MUMU', subtitle: '为热爱植物的人而生', color: 'gray' },
+    { id: 'about', icon: Info, title: '关于 MuMu', subtitle: '为热爱植物的人而生', color: 'gray' },
   ];
   if (!section)
     return (
@@ -169,7 +169,7 @@ export function Settings({
     appearance: '外观与动效',
     data: '数据与备份',
     version: '版本更新',
-    about: '关于 MUMU',
+    about: '关于 MuMu',
   };
   return (
     <div className="settings-detail">
@@ -444,7 +444,7 @@ export function Settings({
                 const enabled = e.target.checked;
                 void run(async () => {
                   if (enabled && !(await enableNotifications())) {
-                    toast('请在系统设置中允许 MUMU Flowers 发送通知');
+                    toast('请在系统设置中允许 MuMu Flowers 发送通知');
                     return;
                   }
                   const value = { ...profile, notifications: enabled };
@@ -581,8 +581,8 @@ export function Settings({
       )}
       {section === 'version' && (
         <div className="settings-panel version-panel">
-          <img className="app-icon" src="/icon.svg" alt="MUMU Flowers 图标" />
-          <h2>MUMU Flowers</h2>
+          <img className="app-icon" src="/icon.svg" alt="MuMu Flowers 图标" />
+          <h2>MuMu Flowers</h2>
           <span className="version-tag">Version {version.version}</span>
           <p>让每一次更新，都带来一点小美好。</p>
           <div className="release-notes">
@@ -630,10 +630,10 @@ export function Settings({
       )}
       {section === 'about' && (
         <div className="settings-panel about-panel">
-          <img className="app-icon" src="/icon.svg" alt="MUMU Flowers 图标" />
+          <img className="app-icon" src="/icon.svg" alt="MuMu Flowers 图标" />
           <span className="eyebrow">A GARDEN OF YOUR OWN</span>
           <h2>花会开，日子也会。</h2>
-          <p>MUMU Flowers 希望帮你记住每一次浇水、每一片新叶，以及和植物一起成长的日常。</p>
+          <p>MuMu Flowers 希望帮你记住每一次浇水、每一片新叶，以及和植物一起成长的日常。</p>
           <div className="info-note">
             <Leaf size={18} />
             <span>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Capacitor } from '@capacitor/core';
@@ -20,17 +20,14 @@ import {
   ChevronRight,
   Check,
   Droplets,
-  Sun,
   Sparkles,
   Heart,
   MapPin,
-  MoreHorizontal,
   ImagePlus,
   X,
   LoaderCircle,
   RefreshCw,
   Scissors,
-  Clock3,
   ShieldCheck,
   Download,
   Pencil,
@@ -59,18 +56,16 @@ import {
   PageHeading,
   SectionTitle,
   SubHeading,
-  PlantCard,
+  PlantGrid,
   Empty,
   Modal,
-  healthLabels,
   moistureLabels,
   entryLabels,
   jobLabels,
   dateLabel,
-  dueLabel,
 } from './components/ui';
 import { Settings } from './components/Settings';
-import { WateringCard } from './components/WateringCard';
+import { PlantDetail } from './components/PlantDetail';
 import {
   addCalendarDays,
   nextCareAt,
@@ -168,11 +163,21 @@ export default function App() {
   const due = plants.filter((p) => startOfDay(nextCareAt(p)) <= today);
   const realPlants = plants.filter((p) => !p.demo);
   const allDemo = plants.length > 0 && !realPlants.length;
-  const searched = plants.filter((plant) =>
-    `${plant.name} ${plant.species} ${plant.location}`.toLowerCase().includes(search.toLowerCase()),
+  const searched = useMemo(
+    () =>
+      plants.filter((plant) =>
+        `${plant.name} ${plant.species} ${plant.location}`
+          .toLowerCase()
+          .includes(search.toLowerCase()),
+      ),
+    [plants, search],
   );
-  const filtered = searched.filter(
-    (p) => (location === '全部' || p.location === location) && (!favoritesOnly || p.favorite),
+  const filtered = useMemo(
+    () =>
+      searched.filter(
+        (p) => (location === '全部' || p.location === location) && (!favoritesOnly || p.favorite),
+      ),
+    [searched, location, favoritesOnly],
   );
   const navigate = useCallback((next: string) => {
     if (next !== pathNow()) {
@@ -221,24 +226,34 @@ export default function App() {
     setModal('new');
     void haptic();
   };
-  const openModal = (name: ModalName, plant?: Plant) => {
-    setTargetId(plant?.id || currentPlant?.id || '');
-    setNote('');
-    setNoteType('note');
-    setMoisture(plant?.moisture || currentPlant?.moisture || 'unknown');
-    setNewImage('');
-    setPhotoKind('plant');
-    if ((name === 'water' || name === 'water-plan') && (plant || currentPlant)) {
-      setWateringDays((plant || currentPlant!).wateringIntervalDays);
-      setWaterResult(null);
-    }
-    if (name === 'edit' && (plant || currentPlant)) {
-      const p = plant || currentPlant!;
-      setForm({ name: p.name, location: p.location, notes: p.notes, intervalDays: p.intervalDays });
-    }
-    setModal(name);
-    void haptic();
-  };
+  const openModal = useCallback(
+    (name: ModalName, plant?: Plant) => {
+      setTargetId(plant?.id || currentPlant?.id || '');
+      setNote('');
+      setNoteType('note');
+      setMoisture(plant?.moisture || currentPlant?.moisture || 'unknown');
+      setNewImage('');
+      setPhotoKind('plant');
+      if ((name === 'water' || name === 'water-plan') && (plant || currentPlant)) {
+        setWateringDays((plant || currentPlant!).wateringIntervalDays);
+        setWaterResult(null);
+      }
+      if (name === 'edit' && (plant || currentPlant)) {
+        const p = plant || currentPlant!;
+        setForm({
+          name: p.name,
+          location: p.location,
+          notes: p.notes,
+          intervalDays: p.intervalDays,
+        });
+      }
+      setModal(name);
+      void haptic();
+    },
+    [currentPlant],
+  );
+  const openPlant = useCallback((plant: Plant) => navigate(`/plant/${plant.id}`), [navigate]);
+  const waterPlant = useCallback((plant: Plant) => openModal('water', plant), [openModal]);
   const startAI = (plant: Plant) => {
     void run(async () => {
       const job = await submitAnalysis(plant);
@@ -250,7 +265,11 @@ export default function App() {
     });
   };
   const choosePhoto = (source: 'camera' | 'gallery') => {
-    if (Capacitor.isNativePlatform()) void run(async () => setNewImage(await nativePhoto(source)));
+    if (Capacitor.isNativePlatform())
+      void run(async () => {
+        const image = await nativePhoto(source);
+        if (image) setNewImage(image);
+      });
     else (source === 'camera' ? cameraInput : photoInput).current?.click();
   };
   const receivePhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -303,20 +322,44 @@ export default function App() {
   }, [plants, profile.notifications, profile.reminderHour, ready]);
   useEffect(() => {
     if (!ready) return;
-    const last = Number(localStorage.getItem('mumu-update-checked') || 0);
-    if (Date.now() - last < 6 * 3600000) return;
-    void checkUpdate()
-      .then((next) => {
-        localStorage.setItem('mumu-update-checked', String(Date.now()));
-        if (next && localStorage.getItem('mumu-update-later') !== next.version) setRelease(next);
-      })
-      .catch(() => {});
+    let disposed = false;
+    let pending = false;
+    let lastCheck = 0;
+    const inspect = () => {
+      if (pending || document.visibilityState === 'hidden' || Date.now() - lastCheck < 5 * 60000)
+        return;
+      pending = true;
+      lastCheck = Date.now();
+      void checkUpdate()
+        .then((next) => {
+          if (!disposed && next && sessionStorage.getItem('mumu-update-later') !== next.version)
+            setRelease(next);
+        })
+        .catch(() => {})
+        .finally(() => {
+          pending = false;
+        });
+    };
+    inspect();
+    const timer = setInterval(inspect, 5 * 60000);
+    document.addEventListener('visibilitychange', inspect);
+    const nativeHandle = Capacitor.isNativePlatform()
+      ? NativeApp.addListener('appStateChange', ({ isActive }) => {
+          if (isActive) inspect();
+        })
+      : null;
+    return () => {
+      disposed = true;
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', inspect);
+      void nativeHandle?.then((handle) => handle.remove());
+    };
   }, [ready]);
   useEffect(() => {
     if (Capacitor.isNativePlatform()) {
       const backHandle = NativeApp.addListener('backButton', () => {
-        if (modal) setModal(null);
-        else if (lightbox) setLightbox('');
+        if (modal || lightbox || release)
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
         else if (isSubpage) back();
         else void NativeApp.minimizeApp();
       });
@@ -341,7 +384,7 @@ export default function App() {
         void notifyHandle.then((h) => h.remove());
       };
     }
-  }, [modal, lightbox, isSubpage, back, navigate]);
+  }, [modal, lightbox, release, isSubpage, back, navigate]);
   useEffect(() => {
     if (
       Capacitor.isNativePlatform() ||
@@ -472,7 +515,7 @@ export default function App() {
       <div className="main-shell">
         <header className="topbar">
           <div className="breadcrumb">
-            <span>MUMU Flowers</span>
+            <span>MuMu Flowers</span>
             <ChevronRight size={13} />
             <b>
               {active === 'plant'
@@ -516,16 +559,13 @@ export default function App() {
                       opacity: 0,
                       x: isSubpage ? 25 * direction : 0,
                       y: isSubpage ? 0 : 8,
-                      filter: 'blur(3px)',
                     }
               }
-              animate={{ opacity: 1, x: 0, y: 0, filter: 'blur(0px)' }}
+              animate={{ opacity: 1, x: 0, y: 0 }}
               exit={
-                reduceMotion
-                  ? { opacity: 1 }
-                  : { opacity: 0, x: isSubpage ? -10 * direction : 0, filter: 'blur(2px)' }
+                reduceMotion ? { opacity: 1 } : { opacity: 0, x: isSubpage ? -10 * direction : 0 }
               }
-              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ duration: reduceMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] }}
             >
               {active === 'garden' && (
                 <div className="garden-page">
@@ -587,17 +627,13 @@ export default function App() {
                   </div>
                   {plants.length ? (
                     searched.length ? (
-                      <div className="plant-grid garden-grid">
-                        {searched.map((plant) => (
-                          <PlantCard
-                            key={plant.id}
-                            plant={plant}
-                            onClick={() => navigate(`/plant/${plant.id}`)}
-                            onWater={() => openModal('water', plant)}
-                            busy={busy}
-                          />
-                        ))}
-                      </div>
+                      <PlantGrid
+                        className="plant-grid garden-grid"
+                        plants={searched}
+                        busy={busy}
+                        onOpen={openPlant}
+                        onWater={waterPlant}
+                      />
                     ) : (
                       <Empty title="没有找到这株植物" text="换个名称或位置再找找。" />
                     )
@@ -663,17 +699,13 @@ export default function App() {
                     ))}
                   </div>
                   {filtered.length ? (
-                    <div className="plant-grid collection-grid">
-                      {filtered.map((p) => (
-                        <PlantCard
-                          key={p.id}
-                          plant={p}
-                          onClick={() => navigate(`/plant/${p.id}`)}
-                          onWater={() => openModal('water', p)}
-                          busy={busy}
-                        />
-                      ))}
-                    </div>
+                    <PlantGrid
+                      className="plant-grid collection-grid"
+                      plants={filtered}
+                      busy={busy}
+                      onOpen={openPlant}
+                      onWater={waterPlant}
+                    />
                   ) : (
                     <Empty
                       title={plants.length ? '没有找到这位绿色朋友' : '你的花园，从这里开始'}
@@ -992,216 +1024,29 @@ export default function App() {
                         <Pencil size={19} />
                       </button>
                     </SubHeading>
-                    <div className="plant-detail-grid">
-                      <div className="plant-visual">
-                        <button
-                          className="detail-cover"
-                          onClick={() => setLightbox(currentPlant.cover)}
-                        >
-                          <img src={currentPlant.cover} alt={currentPlant.name} />
-                          <span className={`status-pill ${currentPlant.health}`}>
-                            <i />
-                            {healthLabels[currentPlant.health]}
-                          </span>
-                          {currentPlant.demo && <span className="detail-demo-tag">示例档案</span>}
-                        </button>
-                        <div className="photo-strip">
-                          {photos
-                            .filter((p) => p.plantId === currentPlant.id)
-                            .slice(0, 4)
-                            .map((p) => (
-                              <button key={p.id} onClick={() => setLightbox(p.dataUrl)}>
-                                <img src={p.dataUrl} alt={p.caption} />
-                                {p.kind === 'soil' && <small>盆土</small>}
-                              </button>
-                            ))}
-                          <button className="photo-add" onClick={() => openModal('photo')}>
-                            <ImagePlus size={22} />
-                            <small>记录生长</small>
-                          </button>
-                        </div>
-                        <div className="plant-birthday">
-                          <Sprout size={16} />
-                          相伴{' '}
-                          {Math.max(1, Math.floor((Date.now() - currentPlant.createdAt) / day))} 天
-                          <span>始于 {dateLabel(currentPlant.createdAt)}</span>
-                        </div>
-                      </div>
-                      <div className="plant-information">
-                        <span className="eyebrow">ONE OF YOUR GREEN FRIENDS</span>
-                        <h1>{currentPlant.name}</h1>
-                        <div className="plant-meta">
-                          <span>
-                            <MapPin size={14} />
-                            {currentPlant.location}
-                          </span>
-                          <span>{currentPlant.species}</span>
-                        </div>
-                        {currentPlant.notes && <p className="plant-note">{currentPlant.notes}</p>}
-                        <WateringCard
-                          plant={currentPlant}
-                          busy={busy}
-                          onWater={() => openModal('water')}
-                          onPlan={() => openModal('water-plan')}
-                        />
-                        <div className="detail-actions">
-                          <button className="secondary-button" onClick={() => openModal('check')}>
-                            <Check size={17} />
-                            检查盆土
-                          </button>
-                          <button className="secondary-button" onClick={() => openModal('note')}>
-                            <Pencil size={17} />
-                            写日记
-                          </button>
-                        </div>
-                        <section className="analysis-card">
-                          <div className="analysis-title">
-                            <span>
-                              <Sparkles size={20} />
-                              <b>AI 植物观察</b>
-                            </span>
-                            <button
-                              className="text-button"
-                              disabled={busy || liveJobs.some((j) => j.plantId === currentPlant.id)}
-                              onClick={() => startAI(currentPlant)}
-                            >
-                              {liveJobs.some((j) => j.plantId === currentPlant.id) ? (
-                                <>
-                                  <LoaderCircle className="spin" size={14} />
-                                  后台分析中
-                                </>
-                              ) : (
-                                <>
-                                  {' '}
-                                  {currentPlant.analysis ? '重新分析' : '开始分析'}
-                                  <ArrowUpRight size={15} />
-                                </>
-                              )}
-                            </button>
-                          </div>
-                          {currentPlant.analysis ? (
-                            <>
-                              <p>{currentPlant.analysis.summary}</p>
-                              <div className="analysis-tags">
-                                <span>
-                                  识别把握：
-                                  {
-                                    { high: '较高', medium: '一般', low: '较低' }[
-                                      currentPlant.analysis.confidence
-                                    ]
-                                  }
-                                </span>
-                                <span>
-                                  土表观察：{moistureLabels[currentPlant.analysis.soil.surface]}
-                                </span>
-                              </div>
-                              <p className="analysis-soil">{currentPlant.analysis.soil.note}</p>
-                              {currentPlant.analysis.observations.length > 0 && (
-                                <ul>
-                                  {currentPlant.analysis.observations.map((item) => (
-                                    <li key={item}>{item}</li>
-                                  ))}
-                                </ul>
-                              )}
-                              {currentPlant.analysis.warnings.map((warning) => (
-                                <p className="analysis-warning" key={warning}>
-                                  {warning}
-                                </p>
-                              ))}
-                              <button
-                                className="secondary-button full"
-                                onClick={() => openModal('plan')}
-                              >
-                                查看并采用检查计划
-                                <ChevronRight size={15} />
-                              </button>
-                              <small className="analysis-time">
-                                {currentPlant.analysisAt && dateLabel(currentPlant.analysisAt)} · AI
-                                建议需要结合实际情况确认
-                              </small>
-                            </>
-                          ) : (
-                            <>
-                              <p>
-                                拍下叶片，再加一张盆土照片，
-                                <br />让 AI 帮你观察状态，整理专属养护指南。
-                              </p>
-                              <small>后台分析，无需等待 · 先在「我的」配置 AI</small>
-                              {jobs.find(
-                                (j) => j.plantId === currentPlant.id && j.status === 'failed',
-                              ) && (
-                                <button
-                                  className="text-button danger"
-                                  onClick={() => {
-                                    setCareTab('queue');
-                                    navigate('/care');
-                                  }}
-                                >
-                                  分析未完成，查看任务
-                                  <ChevronRight size={14} />
-                                </button>
-                              )}
-                            </>
-                          )}
-                        </section>
-                      </div>
-                    </div>
-                    {currentPlant.analysis && (
-                      <>
-                        <SectionTitle title="它的专属养护指南" note="AI 建议" />
-                        <div className="care-guide">
-                          {[
-                            {
-                              icon: Droplets,
-                              title: '浇水',
-                              text: currentPlant.analysis.watering.advice,
-                            },
-                            {
-                              icon: Sun,
-                              title: '光照与温度',
-                              text: `${currentPlant.analysis.care.light} ${currentPlant.analysis.care.temperature}`,
-                            },
-                            {
-                              icon: Sprout,
-                              title: '施肥',
-                              text: currentPlant.analysis.care.fertilizer,
-                            },
-                            {
-                              icon: Scissors,
-                              title: '修剪',
-                              text: currentPlant.analysis.care.pruning,
-                            },
-                          ].map((item) => (
-                            <details key={item.title} className="card">
-                              <summary>
-                                <item.icon size={21} />
-                                <b>{item.title}</b>
-                                <ChevronRight size={17} />
-                              </summary>
-                              <p>{item.text}</p>
-                            </details>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                    <SectionTitle
-                      title="我们的生长故事"
-                      action="记录一下"
-                      onAction={() => openModal('note')}
+                    <PlantDetail
+                      plant={currentPlant}
+                      photos={photos.filter((photo) => photo.plantId === currentPlant.id)}
+                      entries={entries.filter((entry) => entry.plantId === currentPlant.id)}
+                      busy={busy}
+                      analyzing={liveJobs.some((job) => job.plantId === currentPlant.id)}
+                      failed={jobs.some(
+                        (job) => job.plantId === currentPlant.id && job.status === 'failed',
+                      )}
+                      onPhoto={() => openModal('photo')}
+                      onLightbox={setLightbox}
+                      onWater={() => openModal('water')}
+                      onPlan={() => openModal('water-plan')}
+                      onCheck={() => openModal('check')}
+                      onNote={() => openModal('note')}
+                      onAnalyze={() => startAI(currentPlant)}
+                      onAIPlan={() => openModal('plan')}
+                      onTasks={() => {
+                        setCareTab('queue');
+                        navigate('/care');
+                      }}
+                      renderEntry={renderEntry}
                     />
-                    <div className="journal-list">
-                      {entries
-                        .filter((e) => e.plantId === currentPlant.id)
-                        .slice(0, 20)
-                        .map(renderEntry)}
-                    </div>
-                    <button
-                      className="text-button delete-plant"
-                      onClick={() => openModal('delete')}
-                    >
-                      <Trash2 size={14} />
-                      移除这株植物
-                    </button>
                   </>
                 ) : (
                   <>
@@ -1226,6 +1071,19 @@ export default function App() {
           aria-label="底部导航"
           style={{ gridTemplateColumns: `repeat(${visibleMenus.length}, minmax(0, 1fr))` }}
         >
+          <span
+            className="bottom-nav-indicator"
+            aria-hidden="true"
+            style={{
+              width: `calc((100% - 14px) / ${visibleMenus.length})`,
+              transform: `translateX(${
+                Math.max(
+                  0,
+                  visibleMenus.findIndex((route) => route.id === active),
+                ) * 100
+              }%)`,
+            }}
+          />
           {visibleMenus.map((route) => (
             <button
               key={route.id}
@@ -1345,7 +1203,7 @@ export default function App() {
                 />
               </label>
               <label>
-                检查盆土周期
+                建议浇水间隔
                 <select
                   value={form.intervalDays}
                   onChange={(e) => setForm({ ...form, intervalDays: Number(e.target.value) })}
@@ -1756,7 +1614,7 @@ export default function App() {
               />
             </label>
             <label>
-              建议浇水间隔（天）
+              盆土检查周期（天）
               <input
                 type="number"
                 required
@@ -1779,6 +1637,15 @@ export default function App() {
             <button className="primary-button full" disabled={busy}>
               保存档案
               <Check size={17} />
+            </button>
+            <button
+              type="button"
+              className="text-button danger full"
+              disabled={busy}
+              onClick={() => openModal('delete', target)}
+            >
+              <Trash2 size={14} />
+              移除这株植物
             </button>
           </form>
         </Modal>
@@ -1864,7 +1731,7 @@ export default function App() {
         <Modal
           title="小花园有了新变化"
           onClose={() => {
-            localStorage.setItem('mumu-update-later', release.version);
+            sessionStorage.setItem('mumu-update-later', release.version);
             setRelease(null);
           }}
         >
@@ -1883,7 +1750,7 @@ export default function App() {
             <button
               className="secondary-button"
               onClick={() => {
-                localStorage.setItem('mumu-update-later', release.version);
+                sessionStorage.setItem('mumu-update-later', release.version);
                 setRelease(null);
               }}
             >

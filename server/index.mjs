@@ -194,7 +194,7 @@ export function createMumuServer(options = {}) {
       return;
     }
     if (url.pathname === '/api/health' && req.method === 'GET') {
-      json(res, 200, { app: 'MUMU Flowers', status: 'ok' });
+      json(res, 200, { app: 'MuMu Flowers', status: 'ok' });
       return;
     }
     const incoming = (req.headers.authorization || '').replace(/^Bearer /, '');
@@ -353,7 +353,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const host = process.env.HOST || '127.0.0.1';
   const port = Number(process.env.PORT || 8787);
   app.server.listen(port, host, () => {
-    console.log(`MUMU Flowers 服务：http://${host}:${port}`);
+    console.log(`MuMu Flowers 服务：http://${host}:${port}`);
     console.log(
       '访问令牌保存在 server/data/access-token（或 MUMU_ACCESS_TOKEN）。请在应用的 AI 配置页填写。',
     );

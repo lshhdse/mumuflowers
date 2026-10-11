@@ -11,7 +11,12 @@ test('each flower can check in watering, save its own interval and keep the next
   await page.getByRole('button', { name: '确认已浇水' }).click();
   const success = page.getByRole('dialog', { name: '浇水打卡成功' });
   await expect(success.getByText(/建议 5 天后/)).toBeVisible();
-  await expect(page.locator('.modal-backdrop')).toHaveCSS('opacity', '1');
+  await page.waitForFunction(() =>
+    document
+      .querySelector('[role="dialog"]')
+      ?.getAnimations()
+      .every((animation) => animation.playState === 'finished'),
+  );
   await page.screenshot({ path: 'artifacts/watering-success-mobile.png' });
   await page.getByRole('button', { name: '完成', exact: true }).click();
   await expect(page.getByRole('button', { name: '窗边的小森林今天已打卡' })).toBeDisabled();
@@ -125,6 +130,7 @@ test('creates a local plant, records care, writes a diary and keeps settings in 
   await page.getByRole('button', { name: '确认已浇水' }).click();
   await expect(page.getByRole('dialog', { name: '浇水打卡成功' })).toBeVisible();
   await page.getByRole('button', { name: '完成', exact: true }).click();
+  await page.getByRole('tab', { name: '记录', exact: true }).click();
   await expect(page.getByText('浇水打卡完成，建议 7 天后再次检查是否需要浇水。')).toBeVisible();
   await page.getByRole('button', { name: '写日记', exact: true }).click();
   await page.getByLabel('今天的故事').fill('今天长出一片新叶');

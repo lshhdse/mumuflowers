@@ -1,6 +1,6 @@
 {
   "name": "mumu-flowers",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -14,6 +14,7 @@
     "android:sync": "npm run build && cap sync android",
     "android:open": "cap open android",
     "release:prepare": "node scripts/prepare-release.mjs",
+    "release:publish": "node scripts/publish-release.mjs",
     "format": "prettier --write src server scripts tests *.ts *.json *.yml .github/workflows/*.yml *.md"
   },
   "dependencies": {

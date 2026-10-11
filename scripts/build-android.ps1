@@ -22,7 +22,7 @@ try {
   Set-Location -LiteralPath $projectRoot
   New-Item -ItemType Directory -Path 'artifacts' -Force | Out-Null
   $appVersion = (Get-Content -LiteralPath 'src/version.json' -Raw | ConvertFrom-Json).version
-  $apkPath = "artifacts/MUMU-Flowers-$appVersion.apk"
+  $apkPath = "artifacts/MuMu-Flowers-$appVersion.apk"
   Copy-Item -LiteralPath 'android/app/build/outputs/apk/release/app-release.apk' -Destination $apkPath
   Write-Output "安装包：$apkPath"
 } finally {

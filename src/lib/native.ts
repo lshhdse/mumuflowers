@@ -1,4 +1,4 @@
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
@@ -6,6 +6,9 @@ import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import type { Plant, Profile } from '../types';
 import { careReminders } from './reminders';
+const GalleryPicker = registerPlugin<{
+  pick(): Promise<{ dataUrl?: string; cancelled?: boolean }>;
+}>('GalleryPicker');
 export async function haptic() {
   if (Capacitor.isNativePlatform())
     await Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
@@ -36,6 +39,17 @@ export async function compressPhoto(input: Blob): Promise<string> {
   }
 }
 export async function nativePhoto(source: 'camera' | 'gallery') {
+  if (source === 'gallery' && Capacitor.getPlatform() === 'android') {
+    try {
+      const selected = await GalleryPicker.pick();
+      if (selected.cancelled) return null;
+      if (!selected.dataUrl) throw new Error('没有获取到照片');
+      return selected.dataUrl;
+    } catch (error) {
+      if ((error as { code?: string }).code !== 'NO_GALLERY') throw error;
+      // Devices without a gallery use the system photo picker as a compatibility fallback.
+    }
+  }
   const result = await Camera.getPhoto({
     resultType: CameraResultType.Uri,
     source: source === 'camera' ? CameraSource.Camera : CameraSource.Photos,
@@ -88,7 +102,7 @@ export async function saveBackup(raw: string, filename: string) {
       encoding: Encoding.UTF8,
     });
     await Share.share({
-      title: 'MUMU Flowers 花园备份',
+      title: 'MuMu Flowers 花园备份',
       files: [result.uri],
       dialogTitle: '保存花园备份',
     });
@@ -96,7 +110,7 @@ export async function saveBackup(raw: string, filename: string) {
   }
   const file = new File([raw], filename, { type: 'application/json' });
   if (navigator.canShare?.({ files: [file] })) {
-    await navigator.share({ files: [file], title: 'MUMU Flowers 花园备份' });
+    await navigator.share({ files: [file], title: 'MuMu Flowers 花园备份' });
   } else {
     const url = URL.createObjectURL(file);
     const a = document.createElement('a');

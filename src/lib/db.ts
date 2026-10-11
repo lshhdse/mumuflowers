@@ -1,6 +1,7 @@
 import Dexie, { type Table } from 'dexie';
 import { z } from 'zod';
 import type { Plant, Photo, Entry, Job, Profile, Moisture } from '../types';
+import { defaultBottomMenus, normalizeBottomMenus } from './navigation';
 
 class GardenDB extends Dexie {
   plants!: Table<Plant, string>;
@@ -26,12 +27,18 @@ export const defaultProfile: Profile = {
   notifications: false,
   reminderHour: 9,
   theme: 'light',
+  bottomMenus: [...defaultBottomMenus],
 };
 export function loadProfile(): Profile {
   try {
-    return { ...defaultProfile, ...JSON.parse(localStorage.getItem('mumu-profile') || '{}') };
+    const stored = JSON.parse(localStorage.getItem('mumu-profile') || '{}');
+    return {
+      ...defaultProfile,
+      ...stored,
+      bottomMenus: normalizeBottomMenus(stored?.bottomMenus),
+    };
   } catch {
-    return defaultProfile;
+    return { ...defaultProfile, bottomMenus: [...defaultBottomMenus] };
   }
 }
 export function saveProfile(profile: Profile) {
@@ -77,16 +84,14 @@ async function initializeOnce() {
     await db.transaction('rw', db.plants, db.entries, async () => {
       await db.plants.bulkAdd(plants);
       await db.entries.bulkAdd(
-        plants
-          .slice(0, 3)
-          .map((p, i) => ({
-            id: uuid(),
-            plantId: p.id,
-            type: i === 1 ? 'note' : 'water',
-            text: i === 1 ? '新鲜的花，让今天也变得柔软。' : '照顾好每一片新生的叶子。',
-            createdAt: now - i * day,
-            demo: true,
-          })),
+        plants.slice(0, 3).map((p, i) => ({
+          id: uuid(),
+          plantId: p.id,
+          type: i === 1 ? 'note' : 'water',
+          text: i === 1 ? '新鲜的花，让今天也变得柔软。' : '照顾好每一片新生的叶子。',
+          createdAt: now - i * day,
+          demo: true,
+        })),
       );
     });
   }

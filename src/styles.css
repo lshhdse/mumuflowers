@@ -148,19 +148,6 @@ svg {
 .app-shell {
   min-height: 100vh;
 }
-.sidebar {
-  position: fixed;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 224px;
-  z-index: 20;
-  background: var(--side);
-  border-right: 1px solid var(--line);
-  padding: 34px 22px 20px;
-  display: flex;
-  flex-direction: column;
-}
 .brand {
   display: flex;
   align-items: center;
@@ -197,38 +184,6 @@ svg {
   margin-top: 8px;
   letter-spacing: 1px;
 }
-.sidebar-label {
-  font-size: 10px;
-  letter-spacing: 1.5px;
-  color: #a0a69b;
-  margin: 47px 14px 18px;
-}
-.sidebar nav {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-.sidebar nav > button {
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  font-size: 13px;
-  color: #849080;
-  border-radius: 12px;
-  padding: 15px 17px;
-  text-align: left;
-  transition:
-    background 0.2s,
-    color 0.2s;
-}
-.sidebar nav > button.active {
-  background: #eaf0e5;
-  color: var(--green-dark);
-  font-weight: 600;
-}
-.sidebar nav > button:hover {
-  background: var(--soft);
-}
 .nav-count {
   margin-left: auto;
   border-radius: 6px;
@@ -236,40 +191,12 @@ svg {
   font-size: 10px;
   padding: 2px 6px;
 }
-.sidebar-note {
-  margin-top: auto;
-  padding: 38px 18px 33px;
-  position: relative;
-}
 .note-flower {
   display: flex;
   align-items: end;
   color: #93a181;
   margin-bottom: 17px;
   gap: 4px;
-}
-.sidebar-note > .eyebrow {
-  font-size: 8px;
-  letter-spacing: 1.1px;
-  color: #97a28e;
-}
-.sidebar-note p {
-  color: #697963;
-  line-height: 1.9;
-  font-size: 14px;
-  margin: 12px 0;
-}
-.sidebar-note small {
-  color: #a9b09f;
-  font-size: 10px;
-}
-.sidebar-profile {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-top: 1px solid var(--line);
-  padding: 22px 4px 0;
-  text-align: left;
 }
 .sidebar-profile > span,
 .mini-avatar {
@@ -284,23 +211,8 @@ svg {
   font-family: 'Manrope', sans-serif;
   font-size: 13px;
 }
-.sidebar-profile b {
-  font-size: 12px;
-  font-weight: 600;
-  display: block;
-}
-.sidebar-profile small {
-  font-size: 9px;
-  color: var(--muted);
-  margin-top: 5px;
-  display: block;
-}
-.sidebar-profile > svg {
-  margin-left: auto;
-  color: #9da697;
-}
 .main-shell {
-  margin-left: 224px;
+  margin-left: 0;
 }
 .topbar {
   height: 76px;
@@ -1062,24 +974,6 @@ main {
   object-fit: cover;
   border-radius: 8px;
   margin-left: 12px;
-}
-.desktop-footer {
-  padding: 20px 42px;
-  display: flex;
-  justify-content: space-between;
-  font-size: 8px;
-  color: #a8b09c;
-  letter-spacing: 1px;
-  border-top: 1px solid var(--line);
-  margin-top: 20px;
-}
-.desktop-footer > span:last-child {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-.bottom-nav {
-  display: none;
 }
 .background-task {
   position: fixed;
@@ -2551,10 +2445,6 @@ html[data-theme='dark'] .filter-favorite.selected {
   }
 }
 @media (max-width: 1200px) {
-  .sidebar {
-    width: 195px;
-    padding: 30px 18px;
-  }
   .main-shell {
     margin-left: 195px;
   }
@@ -2623,10 +2513,6 @@ html[data-theme='dark'] .filter-favorite.selected {
   }
 }
 @media (max-width: 1020px) {
-  .sidebar {
-    width: 185px;
-    padding: 26px 14px;
-  }
   .main-shell {
     margin-left: 185px;
   }
@@ -2671,9 +2557,6 @@ html[data-theme='dark'] .filter-favorite.selected {
   .garden-stats em {
     font-size: 9px;
   }
-  .sidebar-note {
-    padding-left: 12px;
-  }
   .page-heading h1 {
     font-size: 31px;
   }
@@ -2706,9 +2589,6 @@ html[data-theme='dark'] .filter-favorite.selected {
   }
 }
 @media (max-width: 760px) {
-  .sidebar {
-    display: none;
-  }
   .main-shell {
     margin-left: 0;
   }
@@ -3032,69 +2912,6 @@ html[data-theme='dark'] .filter-favorite.selected {
   }
   .journal-entry > div > p {
     font-size: 10px;
-  }
-  .desktop-footer {
-    display: none;
-  }
-  .bottom-nav {
-    position: fixed;
-    bottom: max(12px, env(safe-area-inset-bottom));
-    left: 14px;
-    right: 14px;
-    height: 65px;
-    z-index: 40;
-    background: var(--glass);
-    backdrop-filter: blur(25px) saturate(150%);
-    -webkit-backdrop-filter: blur(25px) saturate(150%);
-    border: 1px solid #dfe5d68a;
-    border-radius: 23px;
-    box-shadow: 0 6px 30px #293c2821;
-    display: grid;
-    grid-template-columns: 1fr 1fr 2fr 1fr;
-    align-items: center;
-    padding: 7px 7px;
-  }
-  .bottom-nav > div {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0;
-  }
-  .bottom-nav > div > button:not(.camera-nav) {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    flex-direction: column;
-    gap: 5px;
-    font-size: 8px;
-    color: #9ba88e;
-    padding: 4px 0;
-  }
-  .bottom-nav > div > button.active {
-    color: #3e6846;
-  }
-  .bottom-nav > div > button.active svg {
-    stroke-width: 2.2;
-  }
-  .bottom-nav > div:nth-child(3) {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-  .bottom-nav .camera-nav {
-    border-radius: 17px;
-    height: 44px;
-    width: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--green-dark);
-    color: #fff;
-    margin: auto;
-    box-shadow: 0 4px 13px #3b553a26;
-  }
-  .bottom-nav .camera-nav svg {
-    width: 24px;
-    height: 24px;
   }
   .toast {
     left: 50%;
@@ -3787,9 +3604,6 @@ body {
 @media (max-width: 760px) {
   .page-heading p {
     font-size: 11px;
-  }
-  .bottom-nav > div > button:not(.camera-nav) {
-    font-size: 10px;
   }
   .plant-card h3,
   .collection-grid .plant-card h3 {

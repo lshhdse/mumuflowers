@@ -57,12 +57,14 @@ export interface Job {
   result?: Analysis;
   serviceUrl: string;
 }
+export type MenuId = 'garden' | 'plants' | 'care' | 'journal' | 'my';
 export interface Profile {
   name: string;
   gardenName: string;
   notifications: boolean;
   reminderHour: number;
   theme: 'light' | 'dark' | 'system';
+  bottomMenus: MenuId[];
 }
 export interface Connection {
   url: string;

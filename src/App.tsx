@@ -5,7 +5,6 @@ import { Capacitor } from '@capacitor/core';
 import { App as NativeApp } from '@capacitor/app';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import {
-  Flower2,
   LayoutGrid,
   Leaf,
   Sprout,
@@ -69,18 +68,25 @@ import {
   dueLabel,
 } from './components/ui';
 import { Settings } from './components/Settings';
+import { menuOptions } from './lib/navigation';
 import type { Plant, Profile, Release, Entry, Moisture } from './types';
 
 type ModalName =
   'new' | 'photo' | 'note' | 'check' | 'water' | 'edit' | 'delete' | 'plan' | 'start' | null;
-const routes = [
-  { id: 'garden', label: '我的花园', short: '花园', icon: LayoutGrid },
-  { id: 'plants', label: '植物花册', short: '花册', icon: Sprout },
-  { id: 'care', label: '养护提醒', short: '养护', icon: CalendarDays },
-  { id: 'journal', label: '生长日记', short: '日记', icon: BookOpen },
-  { id: 'my', label: '我的', short: '我的', icon: UserRound },
-];
-const pathNow = () => window.location.hash.replace(/^#/, '') || '/garden';
+const routeIcons = {
+  garden: LayoutGrid,
+  plants: Sprout,
+  care: CalendarDays,
+  journal: BookOpen,
+  my: UserRound,
+};
+const routes = menuOptions.map((menu) => ({
+  ...menu,
+  short: menu.label,
+  label: menu.title,
+  icon: routeIcons[menu.id],
+}));
+const pathNow = () => window.location.hash.replace(/^#/, '') || `/${loadProfile().bottomMenus[0]}`;
 const startOfDay = (v: number) => {
   const date = new Date(v);
   date.setHours(0, 0, 0, 0);
@@ -130,17 +136,17 @@ export default function App() {
   const target = plants.find((p) => p.id === targetId) || currentPlant;
   const active = path.split('/')[1];
   const isSubpage = path.split('/').filter(Boolean).length > 1;
+  const visibleMenus = routes.filter((route) => profile.bottomMenus.includes(route.id));
   const liveJobs = jobs.filter((j) => ['submitting', 'queued', 'running'].includes(j.status));
   const today = startOfDay(Date.now());
   const due = plants.filter((p) => startOfDay(p.nextCheckAt) <= today);
   const realPlants = plants.filter((p) => !p.demo);
   const allDemo = plants.length > 0 && !realPlants.length;
-  const filtered = plants.filter(
-    (p) =>
-      (!search ||
-        `${p.name} ${p.species} ${p.location}`.toLowerCase().includes(search.toLowerCase())) &&
-      (location === '全部' || p.location === location) &&
-      (!favoritesOnly || p.favorite),
+  const searched = plants.filter((plant) =>
+    `${plant.name} ${plant.species} ${plant.location}`.toLowerCase().includes(search.toLowerCase()),
+  );
+  const filtered = searched.filter(
+    (p) => (location === '全部' || p.location === location) && (!favoritesOnly || p.favorite),
   );
   const navigate = useCallback((next: string) => {
     if (next !== pathNow()) {
@@ -340,8 +346,6 @@ export default function App() {
         <p>小花园正在醒来…</p>
       </div>
     );
-  const greeting =
-    new Date().getHours() < 11 ? '早安' : new Date().getHours() < 18 ? '午后好' : '晚上好';
   const weekStart = startOfDay(Date.now()) - ((new Date().getDay() + 6) % 7) * day;
   const upcoming = [...plants].sort((a, b) => a.nextCheckAt - b.nextCheckAt);
   const carePlants =
@@ -413,48 +417,6 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <Brand />
-        <span className="sidebar-label">我的植物生活</span>
-        <nav>
-          {routes.map((route) => (
-            <button
-              className={
-                active === route.id || (active === 'plant' && route.id === 'plants') ? 'active' : ''
-              }
-              key={route.id}
-              onClick={() => navigate(`/${route.id}`)}
-            >
-              <route.icon size={20} strokeWidth={1.8} />
-              {route.label}
-              {route.id === 'care' && due.length > 0 && (
-                <span className="nav-count">{due.length}</span>
-              )}
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-note">
-          <div className="note-flower">
-            <Flower2 size={37} strokeWidth={1.1} />
-            <Leaf size={20} />
-          </div>
-          <span className="eyebrow">SLOW DOWN & GROW</span>
-          <p>
-            日子慢一点，
-            <br />
-            花会告诉你答案。
-          </p>
-          <small>给生活留一点绿色</small>
-        </div>
-        <button className="sidebar-profile" onClick={() => navigate('/my')}>
-          <span>{profile.name.slice(0, 1).toUpperCase()}</span>
-          <div>
-            <b>{profile.name}</b>
-            <small>我的花园，慢慢生长</small>
-          </div>
-          <ChevronRight size={16} />
-        </button>
-      </aside>
       <div className="main-shell">
         <header className="topbar">
           <div className="breadcrumb">
@@ -514,13 +476,12 @@ export default function App() {
               transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
             >
               {active === 'garden' && (
-                <>
+                <div className="garden-page">
                   <PageHeading
-                    eyebrow="YOUR LITTLE GREEN WORLD"
-                    title={`${greeting}，${profile.name}`}
-                    description="今天也和喜欢的植物，一起好好生活。"
+                    title={profile.gardenName}
+                    description={`${plants.length} 株植物，慢慢生长`}
                   >
-                    <button className="primary-button add-plant" onClick={newPlant}>
+                    <button className="primary-button" onClick={newPlant}>
                       <Plus size={18} />
                       添加植物
                     </button>
@@ -528,231 +489,73 @@ export default function App() {
                   {allDemo && (
                     <div className="demo-banner">
                       <Leaf size={14} />
-                      <span>正在浏览示例花园，试着添加你的第一株植物吧。</span>
+                      <span>示例花园</span>
                       <button onClick={() => setModal('start')}>
-                        创建我的花园
+                        换成我的植物
                         <ArrowRight size={14} />
                       </button>
                     </div>
                   )}
-                  <div className="home-columns">
-                    <div className="home-main">
-                      <section className="garden-hero">
-                        <img src="/photos/garden.jpg" alt="阳光下的植物和园艺时光" />
-                        <div className="hero-shade" />
-                        <div className="hero-copy">
-                          <span className="hero-eyebrow">
-                            <i /> A LITTLE CARE, A LOT OF LOVE
-                          </span>
-                          <h2>
-                            把生活，
-                            <br />
-                            养成喜欢的样子。
-                          </h2>
-                          <p>
-                            一片新叶，一朵花开。
-                            <br />
-                            每个小小的变化，都值得被记住。
-                          </p>
-                          <button onClick={() => navigate('/journal')}>
-                            记录今天的小美好
-                            <ArrowUpRight size={16} />
-                          </button>
-                        </div>
-                        <div className="hero-caption">
-                          <Flower2 size={18} />
-                          慢慢来，花总会开
-                        </div>
-                      </section>
-                      <div className="garden-stats">
-                        <button onClick={() => navigate('/plants')}>
-                          <span className="stat-icon green">
-                            <Sprout size={20} />
-                          </span>
-                          <div>
-                            <small>花园成员</small>
-                            <b>
-                              {plants.length}
-                              <em>株植物</em>
-                            </b>
-                          </div>
-                          <ArrowUpRight size={16} />
-                        </button>
-                        <button
-                          onClick={() => {
-                            setCareTab('today');
-                            navigate('/care');
-                          }}
-                        >
-                          <span className="stat-icon amber">
-                            <Droplets size={20} />
-                          </span>
-                          <div>
-                            <small>今日待照顾</small>
-                            <b>
-                              {due.length}
-                              <em>件小事</em>
-                            </b>
-                          </div>
-                          <ArrowUpRight size={16} />
-                        </button>
-                        <button onClick={() => navigate('/journal')}>
-                          <span className="stat-icon rose">
-                            <BookOpen size={20} />
-                          </span>
-                          <div>
-                            <small>生长的足迹</small>
-                            <b>
-                              {entries.length}
-                              <em>条记录</em>
-                            </b>
-                          </div>
-                          <ArrowUpRight size={16} />
-                        </button>
-                      </div>
-                      <SectionTitle
-                        title="我的植物"
-                        note={`${plants.length} 位绿色朋友`}
-                        action="查看花册"
-                        onAction={() => navigate('/plants')}
-                      />
-                      {plants.length ? (
-                        <div className="plant-grid home-grid">
-                          {plants.slice(0, 3).map((plant) => (
-                            <PlantCard
-                              key={plant.id}
-                              plant={plant}
-                              onClick={() => navigate(`/plant/${plant.id}`)}
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <Empty
-                          title="等一株植物，住进你的花园"
-                          text="拍一张照片，从它的第一天开始记录。"
-                        >
-                          <button className="primary-button" onClick={newPlant}>
-                            <Plus size={17} />
-                            添加第一株植物
-                          </button>
-                        </Empty>
-                      )}
-                      <section className="recent-journal">
-                        <SectionTitle
-                          title="最近的小美好"
-                          action="所有日记"
-                          onAction={() => navigate('/journal')}
-                        />
-                        {entries.length ? (
-                          entries.slice(0, 2).map(renderEntry)
-                        ) : (
-                          <p className="muted">还没有记录，浇一次水、拍一张照，故事就开始了。</p>
-                        )}
-                      </section>
-                    </div>
-                    <aside className="garden-right">
-                      <section className="today-care card">
-                        <div className="card-topline">
-                          <span className="eyebrow">A MOMENT FOR YOUR PLANTS</span>
-                          <Sun size={19} />
-                        </div>
-                        <h2>今天，照顾一下它们</h2>
-                        <p>一点点关心，就会有回应。</p>
-                        <div className="week-strip">
-                          {Array.from({ length: 7 }, (_, i) => {
-                            const at = weekStart + i * day;
-                            return (
-                              <button
-                                key={i}
-                                className={at === today ? 'today' : ''}
-                                onClick={() => {
-                                  setSelectedDate(at);
-                                  setCareTab('today');
-                                  navigate('/care');
-                                }}
-                              >
-                                <small>{['一', '二', '三', '四', '五', '六', '日'][i]}</small>
-                                <b>{new Date(at).getDate()}</b>
-                                {plants.some((p) => startOfDay(p.nextCheckAt) === at) && <i />}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {due.length ? (
-                          due.slice(0, 3).map((p) => (
-                            <div className="mini-care" key={p.id}>
-                              <img src={p.cover} alt="" />
-                              <button
-                                className="mini-care-info"
-                                onClick={() => navigate(`/plant/${p.id}`)}
-                              >
-                                <b>{p.name}</b>
-                                <small>
-                                  <Droplets size={12} />
-                                  检查一下盆土
-                                </small>
-                              </button>
-                              <button
-                                className="care-check-button"
-                                aria-label={`检查${p.name}盆土`}
-                                onClick={() => openModal('check', p)}
-                              >
-                                <Check size={16} />
-                              </button>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="all-cared">
-                            <CheckCheck size={29} />
-                            <b>今天的花园，很自在</b>
-                            <small>暂时没有需要检查的植物。</small>
-                          </div>
-                        )}
-                        <button
-                          className="text-button full"
-                          onClick={() => {
-                            setCareTab('all');
-                            navigate('/care');
-                          }}
-                        >
-                          查看养护计划
-                          <ArrowRight size={15} />
-                        </button>
-                      </section>
-                      <section className="ai-invitation">
-                        <span className="ai-sparkle">
-                          <Sparkles size={23} />
-                        </span>
-                        <span className="eyebrow">YOUR PLANT COMPANION</span>
-                        <h3>
-                          它的心事，
-                          <br />
-                          AI 帮你读懂。
-                        </h3>
-                        <p>
-                          拍下叶片与盆土，
-                          <br />
-                          多了解它一点点。
-                        </p>
-                        <button onClick={() => navigate('/my/ai')}>
-                          认识你的 AI 助手
-                          <ArrowUpRight size={15} />
-                        </button>
-                        <div className="orb orb-one" />
-                        <div className="orb orb-two" />
-                      </section>
-                      <div className="daily-thought">
-                        <Flower2 size={17} />
-                        <p>
-                          “照顾植物的过程，
-                          <br />
-                          也是照顾自己的日常。”
-                        </p>
-                        <small>今日花园手记</small>
-                      </div>
-                    </aside>
+                  {due.length > 0 && (
+                    <button
+                      className="garden-care-summary"
+                      onClick={() => {
+                        setSelectedDate(today);
+                        setCareTab('today');
+                        navigate('/care');
+                      }}
+                    >
+                      <span className="setting-icon green">
+                        <Droplets size={20} />
+                      </span>
+                      <span>
+                        <b>{due.length} 株植物待检查</b>
+                        <small>看看盆土，再决定是否浇水</small>
+                      </span>
+                      <ChevronRight size={18} />
+                    </button>
+                  )}
+                  <div className="search-field garden-search">
+                    <Search size={18} />
+                    <input
+                      aria-label="搜索植物"
+                      placeholder="搜索植物名称或位置"
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                    />
+                    {search && (
+                      <button
+                        className="icon-button"
+                        aria-label="清空搜索"
+                        onClick={() => setSearch('')}
+                      >
+                        <X size={15} />
+                      </button>
+                    )}
                   </div>
-                </>
+                  {plants.length ? (
+                    searched.length ? (
+                      <div className="plant-grid garden-grid">
+                        {searched.map((plant) => (
+                          <PlantCard
+                            key={plant.id}
+                            plant={plant}
+                            onClick={() => navigate(`/plant/${plant.id}`)}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <Empty title="没有找到这株植物" text="换个名称或位置再找找。" />
+                    )
+                  ) : (
+                    <Empty title="添加你的第一株植物" text="拍一张照片，开始记录它的生长。">
+                      <button className="primary-button" onClick={newPlant}>
+                        <Plus size={17} />
+                        添加第一株植物
+                      </button>
+                    </Empty>
+                  )}
+                </div>
               )}
               {active === 'plants' && (
                 <>
@@ -1371,34 +1174,28 @@ export default function App() {
             </motion.div>
           </AnimatePresence>
         </main>
-        <footer className="desktop-footer">
-          <span>MUMU Flowers</span>
-          <span>
-            一点点关心，日子就会开花。
-            <Flower2 size={13} />
-          </span>
-        </footer>
       </div>
       {!isSubpage && (
-        <nav className="bottom-nav">
-          {routes
-            .filter((r) => r.id !== 'journal')
-            .map((route, i) => (
-              <div key={route.id}>
-                {i === 2 && (
-                  <button className="camera-nav" aria-label="拍照添加植物" onClick={newPlant}>
-                    <Plus size={26} />
-                  </button>
-                )}
-                <button
-                  className={active === route.id ? 'active' : ''}
-                  onClick={() => navigate(`/${route.id}`)}
-                >
-                  <route.icon size={21} />
-                  <span>{route.short}</span>
-                </button>
-              </div>
-            ))}
+        <nav
+          className="bottom-nav"
+          aria-label="底部导航"
+          style={{ gridTemplateColumns: `repeat(${visibleMenus.length}, minmax(0, 1fr))` }}
+        >
+          {visibleMenus.map((route) => (
+            <button
+              key={route.id}
+              className={active === route.id ? 'active' : ''}
+              aria-current={active === route.id ? 'page' : undefined}
+              onClick={() => {
+                navigate(`/${route.id}`);
+                void haptic();
+              }}
+            >
+              <route.icon size={22} strokeWidth={1.8} />
+              <span>{route.short}</span>
+              {route.id === 'care' && due.length > 0 && <i aria-hidden="true" />}
+            </button>
+          ))}
         </nav>
       )}
       {liveJobs.length > 0 && !isSubpage && active !== 'care' && (

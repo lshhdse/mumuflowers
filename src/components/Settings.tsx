@@ -17,14 +17,28 @@ import {
   Check,
   Info,
   ExternalLink,
+  SlidersHorizontal,
+  LayoutGrid,
+  Sprout,
+  CalendarDays,
+  BookOpen,
 } from 'lucide-react';
 import { db, exportGarden, importGarden, removeDemo } from '../lib/db';
 import { api, loadConnection, saveConnection } from '../lib/api';
 import { enableNotifications, syncReminders, saveBackup } from '../lib/native';
 import { checkUpdate, repository } from '../lib/updates';
+import { defaultBottomMenus, menuOptions, normalizeBottomMenus } from '../lib/navigation';
 import { PageHeading, SubHeading, Modal } from './ui';
 import version from '../version.json';
 import type { Profile, Release } from '../types';
+
+const menuIcons = {
+  garden: LayoutGrid,
+  plants: Sprout,
+  care: CalendarDays,
+  journal: BookOpen,
+  my: UserRound,
+};
 
 type Props = {
   section: string;
@@ -63,6 +77,13 @@ export function Settings({
   const fileRef = useRef<HTMLInputElement>(null);
   const [localProfile, setLocalProfile] = useState(profile);
   const rows = [
+    {
+      id: 'menus',
+      icon: SlidersHorizontal,
+      title: '菜单设置',
+      subtitle: '选择底部显示的入口',
+      color: 'green',
+    },
     {
       id: 'profile',
       icon: UserRound,
@@ -110,17 +131,12 @@ export function Settings({
   if (!section)
     return (
       <>
-        <PageHeading
-          eyebrow="A LITTLE ABOUT YOU"
-          title="我的"
-          description="和植物一起，把日子过得慢一点。"
-        />
+        <PageHeading title="我的" />
         <div className="profile-card">
           <div className="profile-avatar">
             <FlowerAvatar />
           </div>
           <div>
-            <span className="eyebrow">GARDEN KEEPER</span>
             <h2>{profile.name}</h2>
             <p>{profile.gardenName}</p>
           </div>
@@ -143,13 +159,10 @@ export function Settings({
             </button>
           ))}
         </div>
-        <p className="settings-footer">
-          Growing together, one day at a time.
-          <Leaf size={13} />
-        </p>
       </>
     );
   const titles: Record<string, string> = {
+    menus: '菜单设置',
     profile: '个人与花园',
     ai: 'AI 配置',
     notifications: '养护提醒',
@@ -161,6 +174,71 @@ export function Settings({
   return (
     <div className="settings-detail">
       <SubHeading title={titles[section] || '设置'} onBack={back} />
+      {section === 'menus' && (
+        <section className="settings-panel menu-settings">
+          <div className="panel-intro">
+            <SlidersHorizontal />
+            <h2>留下你常用的入口</h2>
+            <p>开启的菜单会显示在底部，修改后自动保存。花册和日记可按需开启。</p>
+          </div>
+          <div className="menu-preview" aria-label="底部菜单预览">
+            {menuOptions
+              .filter((menu) => profile.bottomMenus.includes(menu.id))
+              .map((menu) => {
+                const Icon = menuIcons[menu.id];
+                return (
+                  <span key={menu.id}>
+                    <Icon size={20} />
+                    <small>{menu.label}</small>
+                  </span>
+                );
+              })}
+          </div>
+          <div className="menu-options">
+            {menuOptions.map((menu) => {
+              const Icon = menuIcons[menu.id];
+              return (
+                <label className="menu-option" key={menu.id}>
+                  <span className="setting-icon green">
+                    <Icon size={21} />
+                  </span>
+                  <span>
+                    <b>{menu.title}</b>
+                    <small>{menu.description}</small>
+                  </span>
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    aria-label={`显示${menu.label}菜单`}
+                    checked={profile.bottomMenus.includes(menu.id)}
+                    disabled={menu.id === 'my'}
+                    onChange={(event) =>
+                      setProfile({
+                        ...profile,
+                        bottomMenus: normalizeBottomMenus(
+                          event.target.checked
+                            ? [...profile.bottomMenus, menu.id]
+                            : profile.bottomMenus.filter((id) => id !== menu.id),
+                        ),
+                      })
+                    }
+                  />
+                </label>
+              );
+            })}
+          </div>
+          <button
+            className="secondary-button"
+            onClick={() => {
+              setProfile({ ...profile, bottomMenus: [...defaultBottomMenus] });
+              toast('已恢复花园、养护、我的三个入口');
+            }}
+          >
+            恢复默认菜单
+            <RefreshCw size={16} />
+          </button>
+        </section>
+      )}
       {section === 'profile' && (
         <form
           className="settings-panel"

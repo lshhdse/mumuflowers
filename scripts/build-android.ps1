@@ -21,8 +21,10 @@ try {
   if ($LASTEXITCODE -ne 0) { throw '安卓构建失败' }
   Set-Location -LiteralPath $projectRoot
   New-Item -ItemType Directory -Path 'artifacts' -Force | Out-Null
-  Copy-Item -LiteralPath 'android/app/build/outputs/apk/release/app-release.apk' -Destination 'artifacts/MUMU-Flowers-1.0.0.apk'
-  Write-Output '安装包：artifacts/MUMU-Flowers-1.0.0.apk'
+  $appVersion = (Get-Content -LiteralPath 'src/version.json' -Raw | ConvertFrom-Json).version
+  $apkPath = "artifacts/MUMU-Flowers-$appVersion.apk"
+  Copy-Item -LiteralPath 'android/app/build/outputs/apk/release/app-release.apk' -Destination $apkPath
+  Write-Output "安装包：$apkPath"
 } finally {
   Remove-Item Env:MUMU_KEYSTORE_PASSWORD,Env:MUMU_KEY_PASSWORD -ErrorAction SilentlyContinue
   Set-Location -LiteralPath $projectRoot

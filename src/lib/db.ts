@@ -2,6 +2,7 @@ import Dexie, { type Table } from 'dexie';
 import { z } from 'zod';
 import type { Plant, Photo, Entry, Job, Profile, Moisture } from '../types';
 import { defaultBottomMenus, normalizeBottomMenus } from './navigation';
+import { addCalendarDays, validateWateringInterval, wateredToday, wateringPlan } from './watering';
 
 class GardenDB extends Dexie {
   plants!: Table<Plant, string>;
@@ -16,6 +17,14 @@ class GardenDB extends Dexie {
       entries: 'id,plantId,createdAt,type',
       jobs: 'id,plantId,status,createdAt',
     });
+    this.version(2)
+      .stores({ plants: 'id,location,createdAt,demo,nextWaterAt' })
+      .upgrade(async (transaction) => {
+        await transaction
+          .table('plants')
+          .toCollection()
+          .modify((plant) => Object.assign(plant, wateringPlan(plant)));
+      });
   }
 }
 export const db = new GardenDB();
@@ -73,6 +82,9 @@ async function initializeOnce() {
       health,
       moisture: 'unknown',
       intervalDays: index === 2 ? 14 : 7,
+      wateringIntervalDays: index === 2 ? 14 : 7,
+      nextWaterAt: addCalendarDays(now, days),
+      waterSnoozedUntil: null,
       nextCheckAt: now + days * day,
       lastWateredAt: now - (7 - Math.min(days, 7)) * day,
       notes: '这是示例档案，用于体验界面。照片和养护记录不代表你的真实植物。',
@@ -114,6 +126,7 @@ export async function createPlant(
 ) {
   const now = Date.now();
   const id = uuid();
+  validateWateringInterval(input.intervalDays);
   const plant: Plant = {
     ...input,
     id,
@@ -121,6 +134,9 @@ export async function createPlant(
     cover: photoData,
     health: 'unknown',
     moisture: 'unknown',
+    wateringIntervalDays: input.intervalDays,
+    nextWaterAt: addCalendarDays(now, input.intervalDays),
+    waterSnoozedUntil: null,
     nextCheckAt: now + input.intervalDays * day,
     lastWateredAt: null,
     createdAt: now,
@@ -181,22 +197,62 @@ export async function recordCare(
   text: string,
   moisture?: Moisture,
 ) {
+  if (type === 'water') return recordWatering(plantId, undefined, text);
   await db.transaction('rw', db.plants, db.entries, async () => {
     const plant = await db.plants.get(plantId);
     if (!plant) throw new Error('花卉档案不存在');
     const now = Date.now();
     const update: Partial<Plant> = { updatedAt: now };
-    if (type === 'water') {
-      update.lastWateredAt = now;
-      update.moisture = 'moist';
-      update.nextCheckAt = now + plant.intervalDays * day;
-    }
     if (type === 'check') {
       update.moisture = moisture || 'unknown';
       update.nextCheckAt = now + (moisture === 'dry' ? 1 : 2) * day;
+      update.waterSnoozedUntil = update.nextCheckAt;
     }
     await db.plants.update(plantId, update);
     await db.entries.add({ id: uuid(), plantId, type, text, createdAt: now, demo: plant.demo });
+  });
+}
+
+export async function recordWatering(plantId: string, intervalDays?: number, note?: string) {
+  return db.transaction('rw', db.plants, db.entries, async () => {
+    const plant = await db.plants.get(plantId);
+    if (!plant) throw new Error('花卉档案不存在');
+    const now = Date.now();
+    if (wateredToday(plant, now)) return { plant, alreadyRecorded: true };
+    const days = validateWateringInterval(intervalDays ?? plant.wateringIntervalDays);
+    const updated: Plant = {
+      ...plant,
+      wateringIntervalDays: days,
+      nextWaterAt: addCalendarDays(now, days),
+      lastWateredAt: now,
+      waterSnoozedUntil: null,
+      nextCheckAt: addCalendarDays(now, plant.intervalDays),
+      moisture: 'moist',
+      updatedAt: now,
+    };
+    await db.plants.put(updated);
+    await db.entries.add({
+      id: uuid(),
+      plantId,
+      type: 'water',
+      text: note ?? `浇水打卡完成，建议 ${days} 天后再次检查是否需要浇水。`,
+      createdAt: now,
+      demo: plant.demo,
+    });
+    return { plant: updated, alreadyRecorded: false };
+  });
+}
+
+export async function updateWateringPlan(plantId: string, intervalDays: number) {
+  const days = validateWateringInterval(intervalDays);
+  return db.transaction('rw', db.plants, async () => {
+    const plant = await db.plants.get(plantId);
+    if (!plant) throw new Error('花卉档案不存在');
+    await db.plants.update(plantId, {
+      wateringIntervalDays: days,
+      nextWaterAt: addCalendarDays(plant.lastWateredAt ?? plant.createdAt, days),
+      updatedAt: Date.now(),
+    });
   });
 }
 export async function deletePlant(plantId: string) {
@@ -251,6 +307,9 @@ const plantSchema = z.object({
   health: z.enum(['healthy', 'attention', 'urgent', 'unknown']),
   moisture: z.enum(['dry', 'moist', 'wet', 'unknown']),
   intervalDays: z.number().int().min(1).max(60),
+  wateringIntervalDays: z.number().int().min(1).max(60).optional(),
+  nextWaterAt: timestamp.optional(),
+  waterSnoozedUntil: timestamp.nullable().optional(),
   nextCheckAt: timestamp,
   lastWateredAt: timestamp.nullable(),
   createdAt: timestamp,
@@ -320,7 +379,7 @@ export async function importGarden(raw: string) {
   )
     throw new Error('备份中的档案关联不完整');
   await db.transaction('rw', db.plants, db.photos, db.entries, async () => {
-    await db.plants.bulkPut(data.plants);
+    await db.plants.bulkPut(data.plants.map((plant) => ({ ...plant, ...wateringPlan(plant) })));
     await db.photos.bulkPut(data.photos);
     await db.entries.bulkPut(data.entries);
   });

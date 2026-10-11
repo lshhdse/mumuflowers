@@ -22,6 +22,9 @@ export interface Plant {
   health: Health;
   moisture: Moisture;
   intervalDays: number;
+  wateringIntervalDays: number;
+  nextWaterAt: number;
+  waterSnoozedUntil: number | null;
   nextCheckAt: number;
   lastWateredAt: number | null;
   createdAt: number;

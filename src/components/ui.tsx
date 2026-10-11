@@ -1,7 +1,8 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Flower2, ChevronRight, ArrowLeft, Leaf } from 'lucide-react';
+import { X, Flower2, ChevronRight, ArrowLeft, Leaf, Droplets, Check } from 'lucide-react';
 import type { Plant } from '../types';
+import { wateredToday, waterReminderAt, wateringLabel } from '../lib/watering';
 
 export const healthLabels = {
   healthy: '状态良好',
@@ -147,39 +148,62 @@ export function Empty({
     </div>
   );
 }
-export function PlantCard({ plant, onClick }: { plant: Plant; onClick: () => void }) {
+export function PlantCard({
+  plant,
+  onClick,
+  onWater,
+  busy,
+}: {
+  plant: Plant;
+  onClick: () => void;
+  onWater: () => void;
+  busy: boolean;
+}) {
+  const completed = wateredToday(plant);
   return (
-    <motion.button
+    <motion.article
       layout
       className="plant-card"
-      onClick={onClick}
       whileHover={{ y: -5 }}
       whileTap={{ scale: 0.985 }}
     >
-      <div className="plant-card-image">
-        <img src={plant.cover} alt={plant.name} loading="lazy" />
-        {plant.demo && <span className="demo-card-label">示例</span>}
-        <span className={`status-pill ${plant.health}`}>
-          <i />
-          {healthLabels[plant.health]}
-        </span>
-        {plant.favorite && <span className="favorite-marker">♥</span>}
-      </div>
-      <div className="plant-card-content">
-        <small>
-          {plant.location} <span>· {plant.species}</span>
-        </small>
-        <h3>{plant.name}</h3>
-        <div className="plant-card-bottom">
-          <span>
-            <span className="water-dot" /> {dueLabel(plant.nextCheckAt)}
+      <button className="plant-card-open" aria-label={`查看${plant.name}档案`} onClick={onClick}>
+        <div className="plant-card-image">
+          <img src={plant.cover} alt={plant.name} loading="lazy" />
+          {plant.demo && <span className="demo-card-label">示例</span>}
+          <span className={`status-pill ${plant.health}`}>
+            <i />
+            {healthLabels[plant.health]}
           </span>
-          <span className="card-arrow">
-            <ChevronRight size={17} />
-          </span>
+          {plant.favorite && <span className="favorite-marker">♥</span>}
         </div>
+        <div className="plant-card-content">
+          <small>
+            {plant.location} <span>· {plant.species}</span>
+          </small>
+          <h3>{plant.name}</h3>
+          <div className="plant-card-bottom">
+            <span>
+              <span className="water-dot" /> {wateringLabel(waterReminderAt(plant))}
+            </span>
+            <span className="card-arrow">
+              <ChevronRight size={17} />
+            </span>
+          </div>
+        </div>
+      </button>
+      <div className="plant-watering-footer">
+        <small>每 {plant.wateringIntervalDays} 天</small>
+        <button
+          aria-label={`${plant.name}${completed ? '今天已打卡' : '浇水打卡'}`}
+          onClick={onWater}
+          disabled={busy || completed}
+        >
+          {completed ? <Check size={14} /> : <Droplets size={14} />}
+          {completed ? '已打卡' : '浇水打卡'}
+        </button>
       </div>
-    </motion.button>
+    </motion.article>
   );
 }
 export function Modal({

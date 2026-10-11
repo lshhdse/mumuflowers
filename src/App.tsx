@@ -44,6 +44,8 @@ import {
   addPhoto,
   deletePlant,
   recordCare,
+  recordWatering,
+  updateWateringPlan,
   removeDemo,
   loadProfile,
   saveProfile,
@@ -68,11 +70,31 @@ import {
   dueLabel,
 } from './components/ui';
 import { Settings } from './components/Settings';
+import { WateringCard } from './components/WateringCard';
+import {
+  addCalendarDays,
+  nextCareAt,
+  wateredToday,
+  waterReminderAt,
+  wateringDue,
+  wateringLabel,
+} from './lib/watering';
 import { menuOptions } from './lib/navigation';
 import type { Plant, Profile, Release, Entry, Moisture } from './types';
 
 type ModalName =
-  'new' | 'photo' | 'note' | 'check' | 'water' | 'edit' | 'delete' | 'plan' | 'start' | null;
+  | 'new'
+  | 'photo'
+  | 'note'
+  | 'check'
+  | 'water'
+  | 'water-done'
+  | 'water-plan'
+  | 'edit'
+  | 'delete'
+  | 'plan'
+  | 'start'
+  | null;
 const routeIcons = {
   garden: LayoutGrid,
   plants: Sprout,
@@ -118,6 +140,10 @@ export default function App() {
     [note, setNote] = useState(''),
     [noteType, setNoteType] = useState<Entry['type']>('note');
   const [moisture, setMoisture] = useState<Moisture>('unknown');
+  const [wateringDays, setWateringDays] = useState(7);
+  const [waterResult, setWaterResult] = useState<{ plant: Plant; alreadyRecorded: boolean } | null>(
+    null,
+  );
   const [search, setSearch] = useState(''),
     [location, setLocation] = useState('全部'),
     [favoritesOnly, setFavoritesOnly] = useState(false);
@@ -139,7 +165,7 @@ export default function App() {
   const visibleMenus = routes.filter((route) => profile.bottomMenus.includes(route.id));
   const liveJobs = jobs.filter((j) => ['submitting', 'queued', 'running'].includes(j.status));
   const today = startOfDay(Date.now());
-  const due = plants.filter((p) => startOfDay(p.nextCheckAt) <= today);
+  const due = plants.filter((p) => startOfDay(nextCareAt(p)) <= today);
   const realPlants = plants.filter((p) => !p.demo);
   const allDemo = plants.length > 0 && !realPlants.length;
   const searched = plants.filter((plant) =>
@@ -202,6 +228,10 @@ export default function App() {
     setMoisture(plant?.moisture || currentPlant?.moisture || 'unknown');
     setNewImage('');
     setPhotoKind('plant');
+    if ((name === 'water' || name === 'water-plan') && (plant || currentPlant)) {
+      setWateringDays((plant || currentPlant!).wateringIntervalDays);
+      setWaterResult(null);
+    }
     if (name === 'edit' && (plant || currentPlant)) {
       const p = plant || currentPlant!;
       setForm({ name: p.name, location: p.location, notes: p.notes, intervalDays: p.intervalDays });
@@ -292,9 +322,18 @@ export default function App() {
       });
       const notifyHandle = LocalNotifications.addListener(
         'localNotificationActionPerformed',
-        (event) => {
+        async (event) => {
           const id = event.notification.extra?.plantId;
-          if (id) navigate(`/plant/${id}`);
+          if (typeof id !== 'string') return;
+          const plant = await db.plants.get(id);
+          if (!plant) return;
+          navigate(`/plant/${id}`);
+          if (event.notification.extra?.kind === 'water') {
+            setTargetId(id);
+            setWateringDays(plant.wateringIntervalDays);
+            setWaterResult(null);
+            setModal('water');
+          }
         },
       );
       return () => {
@@ -312,21 +351,33 @@ export default function App() {
     )
       return;
     for (const plant of due.filter((p) => !p.demo)) {
-      const key = `mumu-notified-${plant.id}-${plant.nextCheckAt}`;
+      const waterDue = wateringDue(plant);
+      const key = `mumu-notified-${plant.id}-${nextCareAt(plant)}`;
       if (!sessionStorage.getItem(key)) {
-        const notification = new Notification(`${plant.name} 想见见你`, {
-          body: '检查一下盆土，再决定是否需要浇水。',
-          icon: '/icon.svg',
-          tag: plant.id,
-        });
+        const notification = new Notification(
+          waterDue ? `${plant.name} 到了建议浇水日期` : `${plant.name} 想见见你`,
+          {
+            body: waterDue
+              ? '确认盆土需要水后浇水，点击进入浇水打卡。'
+              : '检查一下盆土，再决定是否需要浇水。',
+            icon: '/icon.svg',
+            tag: plant.id,
+          },
+        );
         notification.onclick = () => {
           window.focus();
           navigate(`/plant/${plant.id}`);
+          if (waterDue) {
+            setTargetId(plant.id);
+            setWateringDays(plant.wateringIntervalDays);
+            setWaterResult(null);
+            setModal('water');
+          }
         };
         sessionStorage.setItem(key, 'true');
       }
     }
-  }, [plants, profile.notifications, navigate]);
+  }, [plants, profile.notifications, today, navigate]);
 
   if (initError)
     return (
@@ -347,14 +398,15 @@ export default function App() {
       </div>
     );
   const weekStart = startOfDay(Date.now()) - ((new Date().getDay() + 6) % 7) * day;
-  const upcoming = [...plants].sort((a, b) => a.nextCheckAt - b.nextCheckAt);
+  const upcoming = [...plants].sort((a, b) => nextCareAt(a) - nextCareAt(b));
   const carePlants =
     careTab === 'all'
       ? upcoming
       : plants.filter((p) =>
           selectedDate === today
-            ? startOfDay(p.nextCheckAt) <= selectedDate
-            : startOfDay(p.nextCheckAt) === selectedDate,
+            ? startOfDay(nextCareAt(p)) <= selectedDate
+            : startOfDay(p.nextCheckAt) === selectedDate ||
+              startOfDay(waterReminderAt(p)) === selectedDate,
         );
 
   function savePlantForm(event: FormEvent) {
@@ -509,7 +561,7 @@ export default function App() {
                         <Droplets size={20} />
                       </span>
                       <span>
-                        <b>{due.length} 株植物待检查</b>
+                        <b>{due.length} 株植物待养护</b>
                         <small>看看盆土，再决定是否浇水</small>
                       </span>
                       <ChevronRight size={18} />
@@ -541,6 +593,8 @@ export default function App() {
                             key={plant.id}
                             plant={plant}
                             onClick={() => navigate(`/plant/${plant.id}`)}
+                            onWater={() => openModal('water', plant)}
+                            busy={busy}
                           />
                         ))}
                       </div>
@@ -615,6 +669,8 @@ export default function App() {
                           key={p.id}
                           plant={p}
                           onClick={() => navigate(`/plant/${p.id}`)}
+                          onWater={() => openModal('water', p)}
+                          busy={busy}
                         />
                       ))}
                     </div>
@@ -684,7 +740,11 @@ export default function App() {
                             >
                               <small>星期{['一', '二', '三', '四', '五', '六', '日'][i]}</small>
                               <b>{new Date(at).getDate()}</b>
-                              {plants.some((p) => startOfDay(p.nextCheckAt) === at) && <i />}
+                              {plants.some(
+                                (p) =>
+                                  startOfDay(p.nextCheckAt) === at ||
+                                  startOfDay(waterReminderAt(p)) === at,
+                              ) && <i />}
                             </button>
                           );
                         })}
@@ -721,30 +781,41 @@ export default function App() {
                               </button>
                               <p>
                                 <Droplets size={14} />
-                                检查盆土湿度<span>{dueLabel(p.nextCheckAt)}</span>
+                                {wateringLabel(waterReminderAt(p))}
+                                <span>每 {p.wateringIntervalDays} 天</span>
                               </p>
                             </div>
-                            <button
-                              className="secondary-button"
-                              disabled={busy}
-                              onClick={() => openModal('check', p)}
-                            >
-                              <Check size={16} />
-                              记录检查
-                            </button>
+                            <div className="care-row-actions">
+                              <button
+                                className="primary-button"
+                                disabled={busy || wateredToday(p)}
+                                onClick={() => openModal('water', p)}
+                              >
+                                <Droplets size={16} />
+                                {wateredToday(p) ? '今天已打卡' : '浇水打卡'}
+                              </button>
+                              <button
+                                className="secondary-button"
+                                disabled={busy}
+                                onClick={() => openModal('check', p)}
+                              >
+                                <Check size={16} />
+                                记录检查
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
                       {!carePlants.length && (
                         <Empty
                           title="今天可以慢一点"
-                          text="没有待检查的植物，去看看它们的新叶吧。"
+                          text="没有待养护的植物，去看看它们的新叶吧。"
                         />
                       )}
                       <div className="info-note care-note">
                         <ShieldCheck size={18} />
                         <span>
-                          检查周期是养护起点，实际浇水取决于盆土、天气与植物状态。完成检查后，会安排下一次提醒。
+                          浇水打卡后，按每株植物的间隔安排下一次建议。盆土仍湿润时可以记录检查，稍后再提醒。
                         </span>
                       </div>
                     </>
@@ -967,39 +1038,13 @@ export default function App() {
                           <span>{currentPlant.species}</span>
                         </div>
                         {currentPlant.notes && <p className="plant-note">{currentPlant.notes}</p>}
-                        <div className="plant-metrics">
-                          <div>
-                            <Droplets size={20} />
-                            <small>盆土实测记录</small>
-                            <b>{moistureLabels[currentPlant.moisture]}</b>
-                          </div>
-                          <div>
-                            <CalendarDays size={20} />
-                            <small>检查周期</small>
-                            <b>
-                              {currentPlant.intervalDays}
-                              <em> 天</em>
-                            </b>
-                          </div>
-                          <div>
-                            <Clock3 size={20} />
-                            <small>上次浇水</small>
-                            <b>
-                              {currentPlant.lastWateredAt
-                                ? dateLabel(currentPlant.lastWateredAt)
-                                : '尚未记录'}
-                            </b>
-                          </div>
-                        </div>
+                        <WateringCard
+                          plant={currentPlant}
+                          busy={busy}
+                          onWater={() => openModal('water')}
+                          onPlan={() => openModal('water-plan')}
+                        />
                         <div className="detail-actions">
-                          <button
-                            className="primary-button"
-                            disabled={busy}
-                            onClick={() => openModal('water')}
-                          >
-                            <Droplets size={17} />
-                            记录浇水
-                          </button>
                           <button className="secondary-button" onClick={() => openModal('check')}>
                             <Check size={17} />
                             检查盆土
@@ -1516,7 +1561,7 @@ export default function App() {
               <button
                 className="secondary-button"
                 disabled={busy}
-                onClick={() => setModal('water')}
+                onClick={() => openModal('water', target)}
               >
                 <Droplets size={17} />
                 已确认并浇水
@@ -1526,31 +1571,151 @@ export default function App() {
         </Modal>
       )}
       {modal === 'water' && target && (
-        <Modal title="记录一次温柔的照顾" onClose={() => setModal(null)}>
-          <div className="care-confirm-icon">
-            <Droplets size={33} />
-          </div>
-          <h3 className="center">{target.name}</h3>
-          <p className="modal-description center">
-            确认你已经检查盆土，并完成了浇水。
-            <br />
-            下次将在 {target.intervalDays} 天后提醒检查。
-          </p>
-          <button
-            className="primary-button full"
-            disabled={busy}
-            onClick={() =>
+        <Modal title="浇水打卡" onClose={() => setModal(null)}>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
               void run(async () => {
-                await recordCare(target.id, 'water', '检查盆土后浇水，记下今天的照顾。');
-                setModal(null);
-                toast('它收到你的照顾了，浇水已记录');
+                const result = await recordWatering(target.id, wateringDays);
+                setWaterResult(result);
+                setModal('water-done');
                 void haptic();
-              })
-            }
+              });
+            }}
           >
-            <Droplets size={17} />
-            已经浇好水了
+            <div className="care-confirm-icon">
+              <Droplets size={33} />
+            </div>
+            <h3 className="center">{target.name}</h3>
+            <p className="modal-description center">
+              确认你已完成浇水。这次打卡后，重新安排下一次建议日期。
+            </p>
+            <label>
+              下次浇水间隔（天）
+              <input
+                required
+                type="number"
+                min={1}
+                max={60}
+                step={1}
+                value={wateringDays || ''}
+                onChange={(event) => setWateringDays(Number(event.target.value))}
+              />
+              <small>这株植物单独保存此间隔，可以随季节调整。</small>
+            </label>
+            {target.analysis && (
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => setWateringDays(target.analysis!.watering.suggestedIntervalDays)}
+              >
+                <Sparkles size={15} />
+                使用 AI 参考：{target.analysis.watering.suggestedIntervalDays} 天
+              </button>
+            )}
+            {Number.isInteger(wateringDays) && wateringDays >= 1 && wateringDays <= 60 && (
+              <div className="info-note">
+                <CalendarDays size={18} />
+                <span>
+                  下次建议：{wateringDays} 天后，
+                  {dateLabel(addCalendarDays(Date.now(), wateringDays))}。
+                </span>
+              </div>
+            )}
+            <button className="primary-button full" disabled={busy}>
+              <Droplets size={17} />
+              确认已浇水
+            </button>
+            <button
+              type="button"
+              className="text-button full"
+              onClick={() => openModal('check', target)}
+            >
+              暂不浇水，记录盆土
+              <ChevronRight size={15} />
+            </button>
+          </form>
+        </Modal>
+      )}
+      {modal === 'water-done' && waterResult && (
+        <Modal
+          title={waterResult.alreadyRecorded ? '今天已经打卡' : '浇水打卡成功'}
+          onClose={() => setModal(null)}
+        >
+          <div className="care-confirm-icon">
+            <CheckCheck size={33} />
+          </div>
+          <h3 className="center">{waterResult.plant.name}</h3>
+          <p className="watering-success center">
+            建议 {waterResult.plant.wateringIntervalDays} 天后
+            <br />
+            <b>{dateLabel(waterResult.plant.nextWaterAt)}</b>再检查是否需要浇水。
+          </p>
+          <p className="modal-description center">
+            {profile.notifications
+              ? '养护通知会使用你设置的提醒时间。'
+              : '开启系统提醒后，到日期会提醒你回来打卡。'}
+          </p>
+          <button className="primary-button full" onClick={() => setModal(null)}>
+            完成
+            <Check size={17} />
           </button>
+          {!profile.notifications && (
+            <button
+              className="text-button full"
+              onClick={() => {
+                setModal(null);
+                navigate('/my/notifications');
+              }}
+            >
+              开启系统提醒
+              <ChevronRight size={15} />
+            </button>
+          )}
+        </Modal>
+      )}
+      {modal === 'water-plan' && target && (
+        <Modal title="调整浇水间隔" onClose={() => setModal(null)}>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void run(async () => {
+                await updateWateringPlan(target.id, wateringDays);
+                setModal(null);
+                toast('浇水间隔已更新，建议日期按上次浇水重新计算');
+              });
+            }}
+          >
+            <p className="modal-description">
+              {target.name}的专属周期。修改间隔会从上次实际浇水计算下一次建议日期。
+            </p>
+            <label>
+              浇水间隔（天）
+              <input
+                required
+                type="number"
+                min={1}
+                max={60}
+                step={1}
+                value={wateringDays || ''}
+                onChange={(event) => setWateringDays(Number(event.target.value))}
+              />
+            </label>
+            {target.analysis && (
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => setWateringDays(target.analysis!.watering.suggestedIntervalDays)}
+              >
+                <Sparkles size={15} />
+                使用 AI 参考：{target.analysis.watering.suggestedIntervalDays} 天
+              </button>
+            )}
+            <button className="primary-button full" disabled={busy}>
+              保存浇水间隔
+              <Check size={17} />
+            </button>
+          </form>
         </Modal>
       )}
       {modal === 'edit' && target && (
@@ -1591,7 +1756,7 @@ export default function App() {
               />
             </label>
             <label>
-              检查周期（天）
+              建议浇水间隔（天）
               <input
                 type="number"
                 required

@@ -5,6 +5,7 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import type { Plant, Profile } from '../types';
+import { careReminders } from './reminders';
 export async function haptic() {
   if (Capacitor.isNativePlatform())
     await Haptics.impact({ style: ImpactStyle.Light }).catch(() => {});
@@ -45,11 +46,6 @@ export async function nativePhoto(source: 'camera' | 'gallery') {
   if (!result.webPath) throw new Error('没有获取到照片');
   return compressPhoto(await (await fetch(result.webPath)).blob());
 }
-export function notificationId(id: string) {
-  let value = 7;
-  for (const char of id) value = (Math.imul(value, 31) + char.charCodeAt(0)) | 0;
-  return ((value >>> 0) % 2000000000) + 1;
-}
 export async function enableNotifications(): Promise<boolean> {
   if (Capacitor.isNativePlatform()) {
     const permission = await LocalNotifications.requestPermissions();
@@ -66,7 +62,12 @@ export async function enableNotifications(): Promise<boolean> {
   if (!('Notification' in window)) return false;
   return (await Notification.requestPermission()) === 'granted';
 }
-export async function syncReminders(plants: Plant[], profile: Profile) {
+let reminderSync: Promise<void> = Promise.resolve();
+export function syncReminders(plants: Plant[], profile: Profile) {
+  reminderSync = reminderSync.catch(() => {}).then(() => syncRemindersOnce(plants, profile));
+  return reminderSync;
+}
+async function syncRemindersOnce(plants: Plant[], profile: Profile) {
   if (!Capacitor.isNativePlatform()) return;
   const pending = await LocalNotifications.getPending();
   if (pending.notifications.length)
@@ -75,27 +76,7 @@ export async function syncReminders(plants: Plant[], profile: Profile) {
     });
   if (!profile.notifications || (await LocalNotifications.checkPermissions()).display !== 'granted')
     return;
-  const now = Date.now();
-  const notifications = plants
-    .filter((p) => !p.demo)
-    .sort((a, b) => a.nextCheckAt - b.nextCheckAt)
-    .map((p) => {
-      const at = new Date(p.nextCheckAt);
-      at.setHours(profile.reminderHour, 0, 0, 0);
-      if (at.getTime() <= now) {
-        at.setTime(now + 60000);
-      }
-      return {
-        id: notificationId(p.id),
-        title: `${p.name} 想见见你`,
-        body: '检查一下盆土和叶片吧。土壤干燥时，再决定是否浇水。',
-        schedule: { at, allowWhileIdle: true },
-        isExactNotification: false,
-        channelId: 'plant-care',
-        extra: { plantId: p.id },
-      };
-    })
-    .slice(0, 60);
+  const notifications = careReminders(plants, profile);
   if (notifications.length) await LocalNotifications.schedule({ notifications });
 }
 export async function saveBackup(raw: string, filename: string) {

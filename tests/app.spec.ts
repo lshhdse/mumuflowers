@@ -1,5 +1,60 @@
 import { test, expect } from '@playwright/test';
 
+test('each flower can check in watering, save its own interval and keep the next date after reopening', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await page.getByRole('button', { name: '窗边的小森林浇水打卡', exact: true }).click();
+  await page.getByLabel('下次浇水间隔（天）').fill('5');
+  await expect(page.getByText(/下次建议：5 天后/)).toBeVisible();
+  await page.getByRole('button', { name: '确认已浇水' }).click();
+  const success = page.getByRole('dialog', { name: '浇水打卡成功' });
+  await expect(success.getByText(/建议 5 天后/)).toBeVisible();
+  await expect(page.locator('.modal-backdrop')).toHaveCSS('opacity', '1');
+  await page.screenshot({ path: 'artifacts/watering-success-mobile.png' });
+  await page.getByRole('button', { name: '完成', exact: true }).click();
+  await expect(page.getByRole('button', { name: '窗边的小森林今天已打卡' })).toBeDisabled();
+  await expect(
+    page
+      .locator('.plant-card')
+      .filter({ hasText: '阳台的多肉' })
+      .getByText('每 14 天', { exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: '查看窗边的小森林档案' }).click();
+  const plan = page.getByRole('region', { name: '窗边的小森林的浇水计划' });
+  await expect(plan.getByText(/每 5 天一次/)).toBeVisible();
+  await plan.getByRole('button', { name: '调整间隔' }).click();
+  await page.getByLabel('浇水间隔（天）', { exact: true }).fill('10');
+  await page.getByRole('button', { name: '保存浇水间隔' }).click();
+  await expect(plan.getByText(/每 10 天一次/)).toBeVisible();
+  await page.reload();
+  await expect(plan.getByText(/每 10 天一次/)).toBeVisible();
+  await expect(plan.getByRole('button', { name: '今天已打卡' })).toBeDisabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: 'artifacts/watering-detail-mobile.png', fullPage: true });
+});
+
+test('a due reminder can confirm watering and move the flower to its next suggested date', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await page.getByRole('button', { name: '养护', exact: true }).click();
+  await page.getByRole('button', { name: '浇水打卡', exact: true }).first().click();
+  await page.getByLabel('下次浇水间隔（天）').fill('3');
+  await page.getByRole('button', { name: '确认已浇水' }).click();
+  await expect(
+    page.getByRole('dialog', { name: '浇水打卡成功' }).getByText(/建议 3 天后/),
+  ).toBeVisible();
+  await page.getByRole('button', { name: '完成', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '今天可以慢一点' })).toBeVisible();
+  await page.getByRole('button', { name: '所有待办', exact: true }).click();
+  const row = page.locator('.care-row').filter({ hasText: '春日花束' });
+  await expect(row.getByText(/3 天后建议浇水/)).toBeVisible();
+  await expect(row.getByRole('button', { name: '今天已打卡' })).toBeDisabled();
+});
+
 test('custom bottom menus persist, support all five tabs and can be reset', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
@@ -66,9 +121,11 @@ test('creates a local plant, records care, writes a diary and keeps settings in 
   await page.getByRole('checkbox', { name: /创建后后台 AI/ }).uncheck();
   await page.getByRole('button', { name: '加入我的花园' }).click();
   await expect(page.getByRole('heading', { name: '测试茉莉', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '记录浇水', exact: true }).click();
-  await page.getByRole('button', { name: '已经浇好水了' }).click();
-  await expect(page.getByText('检查盆土后浇水，记下今天的照顾。')).toBeVisible();
+  await page.getByRole('button', { name: '浇水打卡', exact: true }).click();
+  await page.getByRole('button', { name: '确认已浇水' }).click();
+  await expect(page.getByRole('dialog', { name: '浇水打卡成功' })).toBeVisible();
+  await page.getByRole('button', { name: '完成', exact: true }).click();
+  await expect(page.getByText('浇水打卡完成，建议 7 天后再次检查是否需要浇水。')).toBeVisible();
   await page.getByRole('button', { name: '写日记', exact: true }).click();
   await page.getByLabel('今天的故事').fill('今天长出一片新叶');
   await page.getByRole('button', { name: '收藏这份小美好' }).click();

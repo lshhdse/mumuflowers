@@ -1,0 +1,168 @@
+.plant-card-open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+}
+
+.plant-watering-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 0 13px;
+  padding: 4px 0 12px;
+  border-top: 1px solid var(--line);
+}
+
+.plant-watering-footer > small {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.plant-watering-footer > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 8px 7px;
+  border-radius: 12px;
+  color: var(--green);
+  background: var(--soft);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.plant-watering-footer > button:disabled {
+  background: var(--field);
+  color: var(--muted);
+  opacity: 1;
+}
+
+.watering-card {
+  padding: 20px;
+  margin: 24px 0 16px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.watering-card-heading,
+.watering-card-heading > span {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.watering-card-heading {
+  justify-content: space-between;
+  font-size: 15px;
+}
+
+.watering-card-heading > span > svg {
+  color: var(--green);
+}
+
+.watering-card-heading > .text-button {
+  min-height: 44px;
+  font-size: 11px;
+}
+
+.watering-dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 17px 0;
+  padding: 15px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.watering-dates small {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.watering-dates b {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.watering-next {
+  color: var(--green);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.watering-soil {
+  margin: 8px 0 18px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.watering-success {
+  margin: 22px 0 16px;
+  font-size: 17px;
+  line-height: 2;
+}
+
+.watering-success b {
+  display: block;
+  color: var(--green);
+  font-size: 26px;
+}
+
+.care-row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 14px;
+  padding: 18px;
+}
+
+.care-row > img {
+  width: 56px;
+  height: 70px;
+}
+
+.care-row p {
+  flex-wrap: wrap;
+  font-size: 11px;
+}
+
+.care-row > .care-row-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 10px;
+}
+
+.care-row-actions > button {
+  flex: 1;
+  min-height: 44px;
+  padding: 10px;
+  font-size: 12px;
+}
+
+html[data-theme='dark'] .watering-next,
+html[data-theme='dark'] .watering-success b,
+html[data-theme='dark'] .plant-watering-footer > button:not(:disabled) {
+  color: #becfaf;
+}
+
+@media (max-width: 380px) {
+  .plant-watering-footer {
+    margin-left: 10px;
+    margin-right: 10px;
+    flex-wrap: wrap;
+  }
+  .plant-watering-footer > button {
+    width: 100%;
+  }
+  .watering-card {
+    padding: 16px;
+  }
+}

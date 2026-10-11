@@ -1,0 +1,107 @@
+# MUMU Flowers
+
+为安卓手机设计的私人花园记录应用。暖白和深绿主题，磨砂浮层、页面返回过渡和触感反馈。首版包含可运行界面、安卓工程、持久化 AI 后台及 GitHub 自动更新工作流。
+
+## 已实现
+
+- 相机拍照 / 相册导入，照片压缩并去除原图 EXIF 信息。
+- 花卉档案、位置筛选、搜索、收藏、生长相册、浇水 / 盆土检查 / 施肥 / 修剪 / 日记记录。
+- 兼容 OpenAI Chat Completions 的视觉模型，识别花卉、观察叶片及土表、生成专属养护指南。
+- 持久化后台 AI 队列，最多 2 个并发任务；提交后不必停留，失败可重试、任务可取消、后台重启可恢复。
+- 安卓本地系统养护通知，应用关闭后也可提醒。采用普通闹钟调度，不请求精确闹钟权限；实际时间可能受系统省电策略影响。
+- “我的”下独立二级页面：个人资料、AI 配置、养护提醒、外观、数据与备份、版本更新、关于。
+- GitHub Release 更新检查、更新内容、立即更新 / 稍后更新，手动检查不受稍后选择限制。
+- 完整 JSON 备份（含照片），导入合并；密钥不进入备份。
+- 示例花园明确标注，可以清除；示例植物不发系统通知。
+
+## 本地运行
+
+需要 Node.js 22.13+（推荐 24 LTS）。
+
+```powershell
+npm ci
+npm run dev
+```
+
+浏览器访问 http://localhost:5173 。AI 服务监听 127.0.0.1:8787。
+
+首次启动在 `server/data/access-token` 生成后台访问令牌。在“我的 → AI 配置”填写它；浏览器服务地址留空，安卓端填部署的 HTTPS 服务地址。然后填写兼容模型 API 的基础地址（例如 `https://api.openai.com/v1`）、支持视觉输入的模型名称和 API 密钥。密钥仅在后台以 AES-256-GCM 加密保存；客户端只得到是否已配置，不会读取原密钥。
+
+也可复制 `.env.example` 为 `.env`，设置稳定的 `MUMU_ACCESS_TOKEN`。没有真实 API 密钥时，档案、照片、日记、检查周期等功能照常工作；AI 会明确提示配置缺失，不提供伪造结果。
+
+```powershell
+npm test
+npm run build
+npm run test:ui
+```
+
+UI 测试需先运行 `npx playwright install chromium`。如使用现有浏览器，可设置 `PLAYWRIGHT_CHROMIUM_EXECUTABLE` 为其路径。
+
+## 安卓安装包
+
+安卓 7.0+，需要更新的 Android System WebView。构建需要 JDK 21、Android SDK Platform 36、Build Tools 35+。推荐用 Android Studio 配置工具链。
+
+```powershell
+npm run android:sync
+npm run android:open
+```
+
+Windows 也可以生成固定签名的正式 APK：
+
+```powershell
+./scripts/build-android.ps1 -JavaHome '你的 JDK 21 目录'
+```
+
+脚本首次生成 `.tools/signing/mumu-release.jks` 和 `.tools/signing/credentials.json`，后续复用相同签名。**必须将整个 signing 目录私人备份**，不要上传到仓库；丢失签名将无法覆盖更新已安装应用。APK 输出到 `artifacts/`。本地 `android/local.properties` 应指向你的 SDK 目录，且不提交。
+
+## 每次推送自动发布更新
+
+`main` 推送触发 `.github/workflows/release.yml`：测试 → 生成 `1.0.<run_number>` 版本 → 编译网页 → 同步安卓 → 构建 APK。编辑 `CHANGELOG.md` 的更新条目即可更新应用内说明。
+
+为确保后续 APK 能覆盖安装，GitHub 仓库需要以下 Actions Secrets，使用**同一份**本地签名文件：
+
+| Secret                      | 内容                              |
+| --------------------------- | --------------------------------- |
+| `ANDROID_KEYSTORE_BASE64`   | `mumu-release.jks` 的 Base64 内容 |
+| `ANDROID_KEYSTORE_PASSWORD` | credentials.json 的 storePassword |
+| `ANDROID_KEY_ALIAS`         | credentials.json 的 alias（mumu） |
+| `ANDROID_KEY_PASSWORD`      | credentials.json 的 keyPassword   |
+
+配置齐全后，每次推送会发布含 APK 的 GitHub Release。未配置签名时仅输出可测试的 debug 构建产物，**不会发布无法保留数据的随机签名更新**。第一次配置时，若仓库工作流计数已用过，版本号会相应递增。
+
+应用启动每 6 小时最多自动检查一次；“稍后更新”暂时忽略此版本，下一版本仍会提醒。“我的 → 版本更新”随时主动检查。立即更新打开官方 GitHub APK 下载链接，下载后由安卓系统确认安装。无需静默安装权限。
+
+## 后台部署
+
+真正的后台 AI 需要独立常驻的服务，手机关闭应用后服务仍然运行。花卉档案保存在手机；只有发起分析时选用的最近植物照片、最近土表照片及备注会上传到你配置的后台和模型服务。
+
+```sh
+docker compose up -d --build
+```
+
+Compose 将端口绑定在服务器 loopback；用 Caddy / Nginx 提供 HTTPS 反向代理到 `127.0.0.1:8787`，在 `MUMU_ALLOWED_ORIGINS` 加入你的网页域名，同时保留 `https://localhost`（安卓应用来源）。把访问令牌填入手机的 AI 配置。不要将未加密 HTTP 暴露到公网。
+
+- 这是个人单用户服务，同一访问令牌的设备共用 AI 配置与任务。没有实现多租户账户体系。
+- `server/data` / Docker 数据卷包含加密任务、设置及加密密钥。迁移时必须一起备份，或设置稳定的 `MUMU_ENCRYPTION_KEY`（64 位十六进制）。Windows 请保持目录仅当前用户可访问。
+- 后台任务保留 30 天，定期启动时清理完成 / 失败 / 取消任务。前端重新打开会同步结果；首版不包含云推送，AI 完成不会在关闭应用时额外推送。已安排的安卓养护通知独立于后台运行。
+- 本地模型可在服务端显式设置 `MUMU_ALLOW_LOCAL_AI_HTTP=true`；默认只允许公开 HTTPS 模型地址并拒绝私网地址。此选项只应用于可信个人服务。
+- 照片不能测量盆土内部含水率、pH 或养分。AI 的土表观察和检查周期是参考，需要结合手动湿度检查确认；“采用检查计划”需要用户主动点击。
+- 浏览器是预览入口；安卓 APK 内置界面及示例照片，可离线记录。浏览器通知只在页面打开时检查，不承诺关闭页面后的提醒。
+
+## 工程结构
+
+```
+src/                 React + TypeScript 界面、IndexedDB 本地数据
+src/lib/native.ts    相机、压缩、触感、安卓通知
+src/lib/api.ts       后台提交、同步、失败恢复
+server/              Node.js HTTP 服务、SQLite 队列、密钥加密、视觉分析
+android/             Capacitor 8 原生安卓工程
+tests/               浏览器实际操作测试
+.github/workflows/   验证与自动构建 / 发布
+```
+
+## 参考与素材
+
+接口按照 [OpenAI 官方视觉输入文档](https://developers.openai.com/api/docs/guides/images-vision) 实现，可配置其他兼容服务。安卓功能参照 [Capacitor Android](https://capacitorjs.com/docs/android)、[Camera](https://capacitorjs.com/docs/apis/camera) 和 [Local Notifications](https://capacitorjs.com/docs/apis/local-notifications) 文档。界面借鉴用户要求的圆角、磨砂层次与自然过渡，没有复制系统应用资源。
+
+示例摄影来自 [Unsplash](https://unsplash.com)，资源链接及摄影页面见 `public/photos/CREDITS.md`；示例名称只作档案体验，不代表经过 AI 的物种识别。

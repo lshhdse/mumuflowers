@@ -1,0 +1,7 @@
+node_modules
+dist
+android
+.tools
+artifacts
+server/data
+package-lock.json

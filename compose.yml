@@ -1,0 +1,15 @@
+services:
+  mumu:
+    build: .
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:8787:8787'
+    volumes:
+      - mumu-data:/app/server/data
+    environment:
+      HOST: 0.0.0.0
+      MUMU_ACCESS_TOKEN: ${MUMU_ACCESS_TOKEN:-}
+      MUMU_ENCRYPTION_KEY: ${MUMU_ENCRYPTION_KEY:-}
+      MUMU_ALLOWED_ORIGINS: ${MUMU_ALLOWED_ORIGINS:-https://localhost,http://localhost,http://localhost:8787}
+volumes:
+  mumu-data:

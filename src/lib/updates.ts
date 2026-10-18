@@ -46,7 +46,15 @@ export function parseManifest(data: Release): Release | null {
     notes: String(data.notes || '体验与稳定性更新').slice(0, 6000),
   };
 }
-export async function checkUpdate(): Promise<Release | null> {
+let inFlight: Promise<Release | null> | null = null;
+export function checkUpdate(): Promise<Release | null> {
+  if (!inFlight)
+    inFlight = fetchUpdate().finally(() => {
+      inFlight = null;
+    });
+  return inFlight;
+}
+async function fetchUpdate(): Promise<Release | null> {
   const native = Capacitor.getPlatform() === 'android';
   if (native) {
     // A small release asset avoids anonymous GitHub API quotas. Older releases fall back to the API.
@@ -54,6 +62,7 @@ export async function checkUpdate(): Promise<Release | null> {
       const manifest = await CapacitorHttp.get({
         url: `https://github.com/${repository}/releases/latest/download/update.json`,
         responseType: 'json',
+        headers: { 'Cache-Control': 'no-cache' },
         connectTimeout: 12000,
         readTimeout: 12000,
       });
@@ -64,7 +73,7 @@ export async function checkUpdate(): Promise<Release | null> {
   }
   const options = {
     url: `https://api.github.com/repos/${repository}/releases/latest`,
-    headers: { Accept: 'application/vnd.github+json' },
+    headers: { Accept: 'application/vnd.github+json', 'Cache-Control': 'no-cache' },
     responseType: 'json' as const,
     connectTimeout: 12000,
     readTimeout: 12000,
@@ -73,7 +82,11 @@ export async function checkUpdate(): Promise<Release | null> {
   try {
     response = native
       ? await CapacitorHttp.get(options)
-      : await fetch(options.url, { headers: options.headers, signal: AbortSignal.timeout(12000) });
+      : await fetch(options.url, {
+          headers: options.headers,
+          cache: 'no-store',
+          signal: AbortSignal.timeout(12000),
+        });
   } catch {
     throw new Error('无法检查更新，请确认网络连接后重试');
   }

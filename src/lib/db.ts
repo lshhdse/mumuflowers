@@ -274,7 +274,7 @@ const photoUrl = z
       /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(v) ||
       /^\/photos\/[a-z]+\.jpg$/.test(v),
   );
-const analysisSchema = z.object({
+export const analysisSchema = z.object({
   commonName: z.string().max(80),
   scientificName: z.string().max(120),
   confidence: z.enum(['high', 'medium', 'low']),

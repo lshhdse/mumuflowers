@@ -55,7 +55,8 @@ import {
   saveProfile,
   day,
 } from './lib/db';
-import { loadConnection, submitAnalysis, pollJobs, retryJob, api } from './lib/api';
+import { submitAnalysis, pollJobs, retryJob, cancelJob } from './lib/api';
+import { getAiSettings } from './lib/direct-ai';
 import {
   compressPhoto,
   nativePhoto,
@@ -81,7 +82,7 @@ import {
 import { Settings } from './components/Settings';
 import { PlantDetail } from './components/PlantDetail';
 import { StartupScreen } from './components/StartupScreen';
-import { UpdateAction } from './components/UpdateAction';
+import { UpdateDialog } from './components/UpdateDialog';
 import {
   addCalendarDays,
   nextCareAt,
@@ -340,8 +341,12 @@ export default function App() {
     let disposed = false;
     let pending = false;
     let lastCheck = 0;
-    const inspect = () => {
-      if (pending || document.visibilityState === 'hidden' || Date.now() - lastCheck < 5 * 60000)
+    const inspect = (force = false) => {
+      if (
+        pending ||
+        document.visibilityState === 'hidden' ||
+        (!force && Date.now() - lastCheck < 5 * 60000)
+      )
         return;
       pending = true;
       lastCheck = Date.now();
@@ -356,17 +361,18 @@ export default function App() {
         });
     };
     inspect();
-    const timer = setInterval(inspect, 5 * 60000);
-    document.addEventListener('visibilitychange', inspect);
+    const timer = setInterval(() => inspect(), 5 * 60000);
+    const onVisible = () => inspect(true);
+    document.addEventListener('visibilitychange', onVisible);
     const nativeHandle = Capacitor.isNativePlatform()
       ? NativeApp.addListener('appStateChange', ({ isActive }) => {
-          if (isActive) inspect();
+          if (isActive) inspect(true);
         })
       : null;
     return () => {
       disposed = true;
       clearInterval(timer);
-      document.removeEventListener('visibilitychange', inspect);
+      document.removeEventListener('visibilitychange', onVisible);
       void nativeHandle?.then((handle) => handle.remove());
     };
   }, [ready]);
@@ -471,7 +477,7 @@ export default function App() {
       setModal(null);
       navigate(`/plant/${plant.id}`);
       toast('新朋友已经住进花园');
-      if (autoAI && loadConnection().token)
+      if (autoAI && (await getAiSettings()).hasKey)
         void submitAnalysis(plant)
           .then(() => toast('AI 识别已在后台开始'))
           .catch((error) => toast(error.message));
@@ -865,8 +871,7 @@ export default function App() {
                         <Sparkles size={18} />
                         <span>
                           AI
-                          由独立后台服务处理；离开此页面后继续分析。重新打开应用时自动领取结果。照片任务在后台保留
-                          30 天。
+                          由手机后台继续分析，离开此页面也不用等待。完成后自动保存到植物档案；系统中断的任务可以手动重试。
                         </span>
                       </div>
                       <div className="job-list">
@@ -921,8 +926,7 @@ export default function App() {
                                   disabled={busy}
                                   onClick={() =>
                                     void run(async () => {
-                                      await api(`/jobs/${job.id}`, { method: 'DELETE' });
-                                      await db.jobs.update(job.id, { status: 'cancelled' });
+                                      await cancelJob(job);
                                       toast('分析任务已取消');
                                     })
                                   }
@@ -1007,6 +1011,12 @@ export default function App() {
                   toast={toast}
                   run={run}
                   busy={busy}
+                  onCheckUpdate={async () => {
+                    const next = await checkUpdate();
+                    if (next) setRelease(next);
+                    return next;
+                  }}
+                  onShowUpdate={setRelease}
                 />
               )}
               {active === 'plant' &&
@@ -1703,7 +1713,7 @@ export default function App() {
             onClick={() =>
               void run(async () => {
                 for (const job of liveJobs.filter((j) => j.plantId === target.id))
-                  await api(`/jobs/${job.id}`, { method: 'DELETE' }).catch(() => {});
+                  await cancelJob(job).catch(() => {});
                 await deletePlant(target.id);
                 setModal(null);
                 navigate('/plants');
@@ -1736,24 +1746,13 @@ export default function App() {
         </Modal>
       )}
       {release && (
-        <Modal
-          title="小花园有了新变化"
-          onClose={() => {
+        <UpdateDialog
+          release={release}
+          onLater={() => {
             sessionStorage.setItem('mumu-update-later', release.version);
             setRelease(null);
           }}
-        >
-          <span className="version-tag">新版本 {release.version}</span>
-          <pre className="update-notes">{release.notes}</pre>
-          <UpdateAction
-            key={release.version}
-            release={release}
-            later={() => {
-              sessionStorage.setItem('mumu-update-later', release.version);
-              setRelease(null);
-            }}
-          />
-        </Modal>
+        />
       )}
       {lightbox && (
         <Modal title="生长的模样" wide onClose={() => setLightbox('')}>

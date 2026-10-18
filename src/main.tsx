@@ -8,6 +8,7 @@ import './watering.css';
 import './refinements.css';
 import './updates.css';
 import './appearance.css';
+import './settings-polish.css';
 import { loadProfile } from './lib/db';
 import { applyTheme, resolveTheme } from './lib/appearance';
 

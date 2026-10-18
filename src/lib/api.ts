@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { db, uuid } from './db';
 import type { Connection, Plant, Job, RemoteJob } from '../types';
+import { submitDirectAnalysis, pollDirectJobs, retryDirectJob, cancelDirectJob } from './direct-ai';
 export function loadConnection(): Connection {
   try {
     return JSON.parse(localStorage.getItem('mumu-connection') || '{"url":"","token":""}');
@@ -28,8 +29,8 @@ export async function api<T>(
   connection = loadConnection(),
 ): Promise<T> {
   if (Capacitor.isNativePlatform() && !connection.url)
-    throw new Error('先在「我的 → AI 配置」填写后台服务 HTTPS 地址');
-  if (!connection.token) throw new Error('先在「我的 → AI 配置」填写服务访问令牌');
+    throw new Error('此任务来自旧版服务，请回到植物档案重新分析');
+  if (!connection.token) throw new Error('此任务来自旧版服务，请回到植物档案重新分析');
   try {
     const response = await fetch(`${connection.url}/api${path}`, {
       ...options,
@@ -56,7 +57,8 @@ export async function api<T>(
     throw error;
   }
 }
-export async function submitAnalysis(plant: Plant): Promise<Job> {
+export const submitAnalysis = submitDirectAnalysis;
+async function submitLegacyAnalysis(plant: Plant): Promise<Job> {
   const current = await db.jobs
     .where('plantId')
     .equals(plant.id)
@@ -128,6 +130,7 @@ export async function pollJobs(onComplete?: (name: string) => void) {
   if (polling) return;
   polling = true;
   try {
+    await pollDirectJobs(onComplete).catch(() => {});
     const connection = loadConnection();
     if (!connection.token) return;
     const jobs = await db.jobs
@@ -180,8 +183,9 @@ export async function pollJobs(onComplete?: (name: string) => void) {
   }
 }
 export async function retryJob(job: Job) {
+  if (job.serviceUrl === 'device') return retryDirectJob(job);
   if (job.serviceUrl !== loadConnection().url)
-    throw new Error('此任务属于另一个后台地址，请恢复原服务连接或重新创建分析');
+    throw new Error('此任务来自旧版服务，请回到植物档案重新分析');
   // Recover an accepted request before retrying, avoiding duplicate paid analyses after network loss.
   try {
     const remote = await api<RemoteJob>(`/jobs/${job.id}`);
@@ -199,7 +203,12 @@ export async function retryJob(job: Job) {
     if (error instanceof Error && error.message.includes('任务已不存在')) {
       const plant = await db.plants.get(job.plantId);
       if (!plant) throw new Error('花卉档案不存在');
-      await submitAnalysis(plant);
+      await submitLegacyAnalysis(plant);
     } else throw error;
   }
+}
+export async function cancelJob(job: Job) {
+  if (job.serviceUrl === 'device') return cancelDirectJob(job);
+  await api(`/jobs/${job.id}`, { method: 'DELETE' });
+  await db.jobs.update(job.id, { status: 'cancelled' });
 }

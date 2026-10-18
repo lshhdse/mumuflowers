@@ -26,6 +26,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(GalleryPickerPlugin.class);
         registerPlugin(UpdateInstallerPlugin.class);
         registerPlugin(LaunchScreenPlugin.class);
+        registerPlugin(DirectAiPlugin.class);
         super.onCreate(savedInstanceState);
         splash.setOnExitAnimationListener(provider -> provider.getView().animate()
             .alpha(0f).setDuration(reduceLaunchMotion ? 0 : 160).withEndAction(provider::remove).start());

@@ -23,12 +23,11 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { db, exportGarden, importGarden, removeDemo } from '../lib/db';
-import { api, loadConnection, saveConnection } from '../lib/api';
+import { AiSettings } from './AiSettings';
 import { enableNotifications, syncReminders, saveBackup } from '../lib/native';
-import { checkUpdate, repository } from '../lib/updates';
+import { repository } from '../lib/updates';
 import { defaultBottomMenus, menuOptions, normalizeBottomMenus } from '../lib/navigation';
 import { PageHeading, SubHeading, Modal } from './ui';
-import { UpdateAction } from './UpdateAction';
 import { useResolvedTheme } from '../lib/appearance';
 import version from '../version.json';
 import type { Profile, Release } from '../types';
@@ -50,6 +49,8 @@ type Props = {
   toast: (text: string) => void;
   run: (action: () => Promise<void>) => Promise<void>;
   busy: boolean;
+  onCheckUpdate: () => Promise<Release | null>;
+  onShowUpdate: (release: Release) => void;
 };
 export function Settings({
   section,
@@ -60,19 +61,14 @@ export function Settings({
   toast,
   run,
   busy,
+  onCheckUpdate,
+  onShowUpdate,
 }: Props) {
   const plants = useLiveQuery(() => db.plants.toArray(), [], []);
-  const [connection, setConnection] = useState(loadConnection);
-  const [config, setConfig] = useState({
-    baseUrl: 'https://api.openai.com/v1',
-    model: 'gpt-4.1-mini',
-    apiKey: '',
-    jsonMode: true,
-  });
-  const [hasKey, setHasKey] = useState(false);
-  const [configLoaded, setConfigLoaded] = useState(false);
   const [release, setRelease] = useState<Release | null>(null);
   const [checked, setChecked] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [updateError, setUpdateError] = useState('');
   const [confirmDemo, setConfirmDemo] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -279,155 +275,7 @@ export function Settings({
           </button>
         </form>
       )}
-      {section === 'ai' && (
-        <form
-          className="settings-panel"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void run(async () => {
-              saveConnection(connection);
-              const value = await api<{ hasKey: boolean }>('/settings', {
-                method: 'PUT',
-                body: JSON.stringify(config),
-              });
-              setHasKey(value.hasKey);
-              setConfig({ ...config, apiKey: '' });
-              setConfigLoaded(true);
-              toast('AI 配置已保存，可以去分析植物了');
-            });
-          }}
-        >
-          <div className="panel-intro">
-            <Sparkles />
-            <h2>认识你的每一株植物</h2>
-            <p>支持兼容 OpenAI 的视觉模型。提交照片后，后台继续分析，你可以自由离开页面。</p>
-          </div>
-          <label>
-            后台服务地址
-            <input
-              type="url"
-              placeholder={
-                Capacitor.isNativePlatform()
-                  ? 'https://flowers.example.com'
-                  : '留空使用当前网页的后台'
-              }
-              value={connection.url}
-              onChange={(e) => {
-                setConnection({ ...connection, url: e.target.value });
-                setConfigLoaded(false);
-              }}
-            />
-            <small>安卓手机填写你部署的 HTTPS 后台地址。</small>
-          </label>
-          <label>
-            服务访问令牌
-            <input
-              type="password"
-              autoComplete="off"
-              placeholder="后台生成的 MUMU_ACCESS_TOKEN"
-              value={connection.token}
-              onChange={(e) => {
-                setConnection({ ...connection, token: e.target.value });
-                setConfigLoaded(false);
-              }}
-            />
-            <small>用于保护你的私人后台，与模型 API 密钥不同。</small>
-          </label>
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={busy}
-            onClick={() =>
-              void run(async () => {
-                saveConnection(connection);
-                const data = await api<typeof config & { hasKey: boolean }>('/settings');
-                setConfig({
-                  baseUrl: data.baseUrl,
-                  model: data.model,
-                  jsonMode: data.jsonMode,
-                  apiKey: '',
-                });
-                setHasKey(data.hasKey);
-                setConfigLoaded(true);
-                toast('已读取后台配置');
-              })
-            }
-          >
-            <RefreshCw size={16} />
-            {configLoaded ? '重新读取配置' : '连接并读取配置'}
-          </button>
-          <div className="form-divider" />
-          <label>
-            模型 API 地址
-            <input
-              required
-              type="url"
-              value={config.baseUrl}
-              placeholder="https://api.example.com/v1"
-              onChange={(e) => setConfig({ ...config, baseUrl: e.target.value })}
-            />
-            <small>填写以 /v1 结尾的兼容接口基础地址。</small>
-          </label>
-          <label>
-            视觉模型名称
-            <input
-              required
-              maxLength={120}
-              value={config.model}
-              onChange={(e) => setConfig({ ...config, model: e.target.value })}
-            />
-          </label>
-          <label>
-            模型 API 密钥
-            <input
-              type="password"
-              autoComplete="new-password"
-              value={config.apiKey}
-              placeholder={hasKey ? '已安全保存，留空保留原密钥' : '输入你的 API Key'}
-              onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
-            />
-          </label>
-          <label className="switch-row">
-            <span>
-              JSON 输出模式<small>若平台不支持，请关闭后重试。</small>
-            </span>
-            <input
-              type="checkbox"
-              checked={config.jsonMode}
-              onChange={(e) => setConfig({ ...config, jsonMode: e.target.checked })}
-            />
-          </label>
-          <div className="info-note">
-            <ShieldCheck size={18} />
-            <span>
-              API 密钥在后台加密保存。分析时照片会发送给你配置的模型服务；档案与日记留在本机。
-            </span>
-          </div>
-          <div className="button-row">
-            <button className="primary-button" disabled={busy}>
-              保存配置
-              <Check size={16} />
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  saveConnection(connection);
-                  const data = await api<{ message: string }>('/settings/test', {
-                    method: 'POST',
-                    body: '{}',
-                  });
-                  toast(data.message);
-                })
-              }
-            >
-              测试连接
-            </button>
-          </div>
-        </form>
-      )}
+      {section === 'ai' && <AiSettings />}
       {section === 'notifications' && (
         <div className="settings-panel">
           <div className="panel-intro">
@@ -576,7 +424,8 @@ export function Settings({
           <div className="info-note">
             <ShieldCheck size={18} />
             <span>
-              备份不包含任何密钥或访问令牌。清除应用数据或卸载前，请先导出备份。导入会合并档案，相同编号的内容由备份覆盖。
+              备份不包含 API
+              Key。清除应用数据或卸载前，请先导出备份。导入会合并档案，相同编号的内容由备份覆盖。
             </span>
           </div>
           {plants.some((p) => p.demo) && (
@@ -604,27 +453,45 @@ export function Settings({
           </div>
           <button
             className="primary-button full"
-            disabled={busy}
-            onClick={() =>
-              void run(async () => {
-                const next = await checkUpdate();
-                setRelease(next);
-                setChecked(true);
-                toast(next ? `发现新版本 ${next.version}` : '当前已是最新版本（或尚未发布新版）');
-              })
-            }
+            disabled={checking}
+            onClick={() => {
+              if (checking) return;
+              setChecking(true);
+              setUpdateError('');
+              void onCheckUpdate()
+                .then((next) => {
+                  setRelease(next);
+                  setChecked(true);
+                })
+                .catch((error) =>
+                  setUpdateError(error instanceof Error ? error.message : '检查失败，请重试'),
+                )
+                .finally(() => setChecking(false));
+            }}
           >
-            <RefreshCw size={17} />
-            {busy ? '正在检查…' : '检查更新'}
+            <RefreshCw size={17} className={checking ? 'spin' : ''} />
+            {checking ? '正在检查…' : '检查更新'}
           </button>
-          {checked && !release && <p className="muted">已经是最新的你了。</p>}
-          {release && (
-            <div className="update-inline">
-              <h3>新版本 {release.version}</h3>
-              <pre>{release.notes}</pre>
-              <UpdateAction key={release.version} release={release} />
-            </div>
-          )}
+          <div className="version-check-result" aria-live="polite">
+            {updateError ? (
+              <p className="settings-feedback is-error" role="alert">
+                {updateError}
+              </p>
+            ) : checked && !release ? (
+              <p className="settings-feedback" role="status">
+                当前已是最新版本。
+              </p>
+            ) : release ? (
+              <div className="version-available">
+                <p>发现新版本 {release.version}</p>
+                <button className="secondary-button full" onClick={() => onShowUpdate(release)}>
+                  查看更新内容
+                </button>
+              </div>
+            ) : (
+              <p className="muted">启动 App、返回前台时会自动检查并提示新版。</p>
+            )}
+          </div>
         </div>
       )}
       {section === 'about' && (

@@ -143,9 +143,9 @@ test('creates a local plant, records care, writes a diary and keeps settings in 
     .getByRole('navigation', { name: '底部导航' })
     .getByRole('button', { name: '我的', exact: true })
     .click();
-  await expect(page.getByLabel('模型 API 密钥', { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel(/^API Key/)).toHaveCount(0);
   await page.getByRole('button', { name: /AI 配置 连接你的植物/ }).click();
-  await expect(page.getByLabel('模型 API 密钥', { exact: true })).toBeVisible();
+  await expect(page.getByLabel(/^API Key/)).toBeVisible();
 });
 test('mobile layout has no horizontal overflow and the reminder check flow works', async ({
   page,

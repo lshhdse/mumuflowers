@@ -2252,6 +2252,17 @@ main {
 .form-two-columns label {
   margin: 0;
 }
+.watering-date-help {
+  margin: -8px 0 18px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.modal input[type='date'] {
+  min-width: 0;
+  width: 100%;
+  min-height: 44px;
+}
 .modal .switch-row {
   border-top: 1px solid var(--line);
   margin-top: 15px;

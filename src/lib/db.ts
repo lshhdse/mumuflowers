@@ -2,7 +2,13 @@ import Dexie, { type Table } from 'dexie';
 import { z } from 'zod';
 import type { Plant, Photo, Entry, Job, Profile, Moisture } from '../types';
 import { defaultBottomMenus, normalizeBottomMenus } from './navigation';
-import { addCalendarDays, validateWateringInterval, wateredToday, wateringPlan } from './watering';
+import {
+  addCalendarDays,
+  startOfDay,
+  validateWateringInterval,
+  wateredToday,
+  wateringPlan,
+} from './watering';
 
 class GardenDB extends Dexie {
   plants!: Table<Plant, string>;
@@ -122,12 +128,23 @@ export async function removeDemo() {
 }
 
 export async function createPlant(
-  input: Pick<Plant, 'name' | 'location' | 'notes' | 'intervalDays'>,
+  input: Pick<Plant, 'name' | 'location' | 'notes' | 'intervalDays'> &
+    Partial<Pick<Plant, 'lastWateredAt'>>,
   photoData: string,
 ) {
   const now = Date.now();
   const id = uuid();
   validateWateringInterval(input.intervalDays);
+  const lastWateredAt = input.lastWateredAt ?? null;
+  if (
+    lastWateredAt !== null &&
+    (!Number.isFinite(lastWateredAt) ||
+      lastWateredAt < 0 ||
+      !Number.isFinite(startOfDay(lastWateredAt)) ||
+      startOfDay(lastWateredAt) > startOfDay(now))
+  )
+    throw new Error('上次浇水日期无效或晚于今天');
+  const nextWaterAt = addCalendarDays(lastWateredAt ?? now, input.intervalDays);
   const plant: Plant = {
     ...input,
     id,
@@ -136,10 +153,10 @@ export async function createPlant(
     health: 'unknown',
     moisture: 'unknown',
     wateringIntervalDays: input.intervalDays,
-    nextWaterAt: addCalendarDays(now, input.intervalDays),
+    nextWaterAt,
     waterSnoozedUntil: null,
-    nextCheckAt: now + input.intervalDays * day,
-    lastWateredAt: null,
+    nextCheckAt: nextWaterAt,
+    lastWateredAt,
     createdAt: now,
     updatedAt: now,
     favorite: false,
@@ -163,6 +180,16 @@ export async function createPlant(
       createdAt: now,
       demo: false,
     });
+    if (lastWateredAt !== null) {
+      await db.entries.add({
+        id: uuid(),
+        plantId: id,
+        type: 'water',
+        text: `添加植物时补记上次浇水，建议间隔 ${input.intervalDays} 天检查是否需要浇水。`,
+        createdAt: lastWateredAt,
+        demo: false,
+      });
+    }
   });
   return plant;
 }

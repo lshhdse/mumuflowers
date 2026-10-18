@@ -12,7 +12,15 @@ import {
   deletePlant,
   day,
 } from './db';
-import { addCalendarDays, wateredToday, waterReminderAt } from './watering';
+import {
+  addCalendarDays,
+  localDateValue,
+  parseWateringDate,
+  startOfDay,
+  wateredToday,
+  waterReminderAt,
+  wateringDue,
+} from './watering';
 import { careReminders } from './reminders';
 import { newerVersion } from './updates';
 const photo = 'data:image/jpeg;base64,/9j/AA==';
@@ -20,6 +28,79 @@ beforeEach(async () => {
   await Promise.all([db.plants.clear(), db.photos.clear(), db.entries.clear(), db.jobs.clear()]);
 });
 describe('local garden persistence', () => {
+  test('a previous watering date anchors reminders and survives backup without claiming current soil moisture', async () => {
+    const lastWateredAt = parseWateringDate(localDateValue(addCalendarDays(Date.now(), -3)));
+    const plant = await createPlant(
+      { name: '三天前浇过的茉莉', location: '阳台', notes: '', intervalDays: 7, lastWateredAt },
+      photo,
+    );
+    expect(plant.nextWaterAt).toBe(addCalendarDays(lastWateredAt, 7));
+    expect(startOfDay(plant.nextWaterAt)).toBe(startOfDay(addCalendarDays(Date.now(), 4)));
+    expect(plant.nextCheckAt).toBe(plant.nextWaterAt);
+    expect(plant.moisture).toBe('unknown');
+    const history = await db.entries
+      .where('plantId')
+      .equals(plant.id)
+      .filter((e) => e.type === 'water')
+      .toArray();
+    expect(history).toHaveLength(1);
+    expect(history[0].createdAt).toBe(lastWateredAt);
+    const backup = await exportGarden();
+    await deletePlant(plant.id);
+    await importGarden(backup);
+    const restored = (await db.plants.get(plant.id))!;
+    expect(restored.lastWateredAt).toBe(lastWateredAt);
+    expect(restored.nextWaterAt).toBe(plant.nextWaterAt);
+  });
+
+  test('watering today avoids duplicates and a much earlier date is immediately due', async () => {
+    const input = { name: '茉莉', location: '阳台', notes: '', intervalDays: 7 };
+    const today = await createPlant(
+      { ...input, lastWateredAt: parseWateringDate(localDateValue()) },
+      photo,
+    );
+    expect(wateredToday(today)).toBe(true);
+    expect((await recordWatering(today.id)).alreadyRecorded).toBe(true);
+    expect(
+      await db.entries
+        .where('plantId')
+        .equals(today.id)
+        .filter((e) => e.type === 'water')
+        .count(),
+    ).toBe(1);
+    const older = await createPlant(
+      { ...input, lastWateredAt: addCalendarDays(startOfDay(Date.now()), -10) },
+      photo,
+    );
+    expect(wateringDue(older)).toBe(true);
+    expect(wateredToday(older)).toBe(false);
+  });
+
+  test('invalid and future watering dates cannot create partial plants or records', async () => {
+    for (const lastWateredAt of [NaN, Infinity, addCalendarDays(Date.now(), 1)]) {
+      await expect(
+        createPlant(
+          { name: '茉莉', location: '阳台', notes: '', intervalDays: 7, lastWateredAt },
+          photo,
+        ),
+      ).rejects.toThrow('上次浇水日期');
+    }
+    expect(await db.plants.count()).toBe(0);
+    expect(await db.entries.count()).toBe(0);
+    expect(await db.photos.count()).toBe(0);
+  });
+
+  test('calendar dates remain local near midnight and reject impossible or future days', () => {
+    const now = new Date(2026, 2, 10, 0, 15).getTime();
+    expect(localDateValue(now)).toBe('2026-03-10');
+    expect(parseWateringDate('2026-03-07', now)).toBe(new Date(2026, 2, 7).getTime());
+    expect(localDateValue(addCalendarDays(parseWateringDate('2026-03-07', now), 3))).toBe(
+      '2026-03-10',
+    );
+    for (const value of ['', '2026-02-30', '2026-13-01', '0000-01-01', '2026-03-11'])
+      expect(() => parseWateringDate(value, now)).toThrow();
+  });
+
   test('care records update the next check and delete cascades through photos and diary', async () => {
     const p = await createPlant(
       { name: '小茉莉', location: '阳台', notes: '', intervalDays: 7 },
@@ -100,25 +181,21 @@ describe('local garden persistence', () => {
     db.close();
     await Dexie.delete('mumu-flowers');
     const legacy = new Dexie('mumu-flowers');
-    legacy
-      .version(1)
-      .stores({
-        plants: 'id,location,createdAt,demo',
-        photos: 'id,plantId,createdAt',
-        entries: 'id,plantId,createdAt,type',
-        jobs: 'id,plantId,status,createdAt',
-      });
+    legacy.version(1).stores({
+      plants: 'id,location,createdAt,demo',
+      photos: 'id,plantId,createdAt',
+      entries: 'id,plantId,createdAt,type',
+      jobs: 'id,plantId,status,createdAt',
+    });
     await legacy.table('plants').put(legacyPlant);
-    await legacy
-      .table('entries')
-      .put({
-        id: 'old-entry',
-        plantId: plant.id,
-        type: 'note',
-        text: '第一朵花',
-        createdAt: previous,
-        demo: false,
-      });
+    await legacy.table('entries').put({
+      id: 'old-entry',
+      plantId: plant.id,
+      type: 'note',
+      text: '第一朵花',
+      createdAt: previous,
+      demo: false,
+    });
     legacy.close();
     await db.open();
     const upgraded = (await db.plants.get(plant.id))!;

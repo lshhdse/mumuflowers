@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { addCalendarDays, localDateValue } from '../src/lib/watering';
 
 test('each flower can check in watering, save its own interval and keep the next date after reopening', async ({
   page,
@@ -123,9 +124,17 @@ test('creates a local plant, records care, writes a diary and keeps settings in 
   await page.locator('input[type=file]').first().setInputFiles('public/photos/monstera.jpg');
   await expect(page.getByAltText('待添加的植物')).toBeVisible();
   await page.getByLabel('给它一个名字').fill('测试茉莉');
+  await page.getByLabel('上次浇水日期').fill(localDateValue(addCalendarDays(Date.now(), -3)));
   await page.getByRole('checkbox', { name: /创建后后台 AI/ }).uncheck();
   await page.getByRole('button', { name: '加入我的花园' }).click();
   await expect(page.getByRole('heading', { name: '测试茉莉', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: '测试茉莉的浇水计划' })).toContainText(
+    '4 天后建议浇水',
+  );
+  await page.reload();
+  await expect(page.getByRole('region', { name: '测试茉莉的浇水计划' })).toContainText(
+    '4 天后建议浇水',
+  );
   await page.getByRole('button', { name: '浇水打卡', exact: true }).click();
   await page.getByRole('button', { name: '确认已浇水' }).click();
   await expect(page.getByRole('dialog', { name: '浇水打卡成功' })).toBeVisible();
@@ -146,6 +155,35 @@ test('creates a local plant, records care, writes a diary and keeps settings in 
   await expect(page.getByLabel(/^API Key/)).toHaveCount(0);
   await page.getByRole('button', { name: /AI 配置 连接你的植物/ }).click();
   await expect(page.getByLabel(/^API Key/)).toBeVisible();
+});
+
+test('new plants default to watered today and reopening the form resets the date', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await page.getByRole('button', { name: '添加植物', exact: true }).click();
+  const date = page.getByLabel('上次浇水日期');
+  await expect(date).toHaveValue(localDateValue());
+  await expect(date).toHaveAttribute('max', localDateValue());
+  await date.fill(localDateValue(addCalendarDays(Date.now(), -10)));
+  await expect(page.locator('#last-watered-help')).toContainText('已到建议日期');
+  await page.getByRole('button', { name: '关闭', exact: true }).click();
+  await page.getByRole('button', { name: '添加植物', exact: true }).click();
+  await expect(date).toHaveValue(localDateValue());
+  await page.locator('input[type=file]').first().setInputFiles('public/photos/monstera.jpg');
+  await page.getByLabel('给它一个名字').fill('今天浇过的花');
+  await page.getByRole('checkbox', { name: /创建后后台 AI/ }).uncheck();
+  await date.fill(localDateValue(addCalendarDays(Date.now(), 1)));
+  await page.getByRole('button', { name: '加入我的花园' }).click();
+  await expect(page.getByRole('dialog', { name: '让新朋友住进花园' })).toBeVisible();
+  expect(await date.evaluate((input: HTMLInputElement) => input.validity.rangeOverflow)).toBe(true);
+  await date.fill(localDateValue());
+  await page.getByRole('button', { name: '加入我的花园' }).click();
+  await expect(page.getByRole('heading', { name: '今天浇过的花', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '今天已打卡', exact: true })).toBeDisabled();
+  await page.reload();
+  await expect(page.getByRole('button', { name: '今天已打卡', exact: true })).toBeDisabled();
 });
 test('mobile layout has no horizontal overflow and the reminder check flow works', async ({
   page,

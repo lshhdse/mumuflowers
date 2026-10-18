@@ -12,6 +12,24 @@ export function addCalendarDays(at: number, days: number) {
   return date.getTime();
 }
 
+// Date inputs use local calendar dates, never UTC ISO dates.
+export function localDateValue(at = Date.now()) {
+  const date = new Date(at);
+  return `${String(date.getFullYear()).padStart(4, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+export function parseWateringDate(value: string, now = Date.now()) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error('请选择上次浇水日期');
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(0);
+  date.setFullYear(year, month - 1, day);
+  date.setHours(0, 0, 0, 0);
+  if (year < 1 || date.getTime() < 0 || localDateValue(date.getTime()) !== value)
+    throw new Error('请选择有效的上次浇水日期');
+  if (date.getTime() > startOfDay(now)) throw new Error('上次浇水日期不能晚于今天');
+  return date.getTime();
+}
+
 export function validateWateringInterval(days: number) {
   if (!Number.isInteger(days) || days < 1 || days > 60)
     throw new Error('浇水间隔请输入 1～60 之间的整数天数');

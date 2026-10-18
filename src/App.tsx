@@ -85,6 +85,8 @@ import { StartupScreen } from './components/StartupScreen';
 import { UpdateDialog } from './components/UpdateDialog';
 import {
   addCalendarDays,
+  localDateValue,
+  parseWateringDate,
   nextCareAt,
   wateredToday,
   waterReminderAt,
@@ -149,6 +151,14 @@ export default function App() {
   const [newImage, setNewImage] = useState(''),
     [photoKind, setPhotoKind] = useState<'plant' | 'soil'>('plant');
   const [form, setForm] = useState({ name: '', location: '阳台', notes: '', intervalDays: 7 });
+  const [lastWateredDate, setLastWateredDate] = useState(() => localDateValue());
+  const plannedWateringAt = useMemo(() => {
+    try {
+      return addCalendarDays(parseWateringDate(lastWateredDate), form.intervalDays);
+    } catch {
+      return null;
+    }
+  }, [lastWateredDate, form.intervalDays]);
   const [autoAI, setAutoAI] = useState(true),
     [note, setNote] = useState(''),
     [noteType, setNoteType] = useState<Entry['type']>('note');
@@ -243,6 +253,7 @@ export default function App() {
     setTargetId('');
     setNewImage('');
     setForm({ name: '', location: '阳台', notes: '', intervalDays: 7 });
+    setLastWateredDate(localDateValue());
     setAutoAI(true);
     setModal('new');
     void haptic();
@@ -471,7 +482,12 @@ export default function App() {
       if (!form.name.trim() || !form.location.trim()) throw new Error('请填写植物名字和位置');
       if (!newImage) throw new Error('先添加一张植物照片吧');
       const plant = await createPlant(
-        { ...form, name: form.name.trim(), location: form.location.trim() },
+        {
+          ...form,
+          name: form.name.trim(),
+          location: form.location.trim(),
+          lastWateredAt: parseWateringDate(lastWateredDate),
+        },
         newImage,
       );
       setModal(null);
@@ -1234,6 +1250,23 @@ export default function App() {
                 </select>
               </label>
             </div>
+            <label>
+              上次浇水日期
+              <input
+                type="date"
+                required
+                min="1970-01-02"
+                max={localDateValue()}
+                value={lastWateredDate}
+                onChange={(e) => setLastWateredDate(e.target.value)}
+                aria-describedby="last-watered-help"
+              />
+            </label>
+            <p id="last-watered-help" className="watering-date-help" aria-live="polite">
+              {plannedWateringAt === null
+                ? '默认今天，也可以选择之前的浇水日期。'
+                : `下次建议浇水：${dateLabel(plannedWateringAt, true)}${wateringDue({ nextWaterAt: plannedWateringAt, waterSnoozedUntil: null }) ? '，已到建议日期，请先检查盆土。' : '，浇水前请先检查盆土。'}`}
+            </p>
             <label>
               想记下什么
               <textarea
